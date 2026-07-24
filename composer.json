@@ -1,0 +1,60 @@
+{
+    "name": "beckonbilling/api-client",
+    "description": "Official PHP client for the Beckon Billing REST API (v1).",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/petarbeck/beckonbilling-api-client",
+    "keywords": ["beckonbilling", "billing", "invoicing", "invoice", "api", "sdk", "rest", "psr-18"],
+    "authors": [
+        {
+            "name": "Petar Beck",
+            "homepage": "https://www.beckonbilling.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/petarbeck/beckonbilling-api-client/issues",
+        "source": "https://github.com/petarbeck/beckonbilling-api-client"
+    },
+    "require": {
+        "php": ">=8.2",
+        "ext-json": "*",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/http-message": "^1.1 || ^2.0",
+        "php-http/discovery": "^1.19"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5 || ^11.0",
+        "guzzlehttp/guzzle": "^7.8",
+        "nyholm/psr7": "^1.8"
+    },
+    "suggest": {
+        "guzzlehttp/guzzle": "A PSR-18 HTTP client, auto-discovered by php-http/discovery.",
+        "symfony/http-client": "An alternative PSR-18 HTTP client, auto-discovered by php-http/discovery.",
+        "nyholm/psr7": "A lightweight PSR-7/PSR-17 message and factory implementation, auto-discovered."
+    },
+    "autoload": {
+        "psr-4": {
+            "BeckonBilling\\ApiClient\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "BeckonBilling\\ApiClient\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    }
+}

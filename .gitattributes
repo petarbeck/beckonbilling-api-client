@@ -1,0 +1,10 @@
+# Keep the distributed package lean: exclude dev-only paths from `composer require`
+# dist archives, but ALWAYS ship the docs an AI agent / integrator needs
+# (README.md, AGENTS.md, llms.txt, openapi.yaml) — those are not export-ignored.
+/tests           export-ignore
+/examples        export-ignore
+/.github         export-ignore
+/.gitattributes  export-ignore
+/.gitignore      export-ignore
+/phpunit.xml.dist export-ignore
+/.php-cs-fixer.dist.php export-ignore

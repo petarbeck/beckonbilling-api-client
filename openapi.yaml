@@ -1,0 +1,1084 @@
+openapi: 3.1.0
+info:
+  title: Beckon Billing API
+  version: "1.0.0"
+  description: |
+    Public REST API (v1) for Beckon Billing.
+
+    This document is the **canonical contract** for the API. It is consumed by
+    the official PHP client (`beckonbilling/api-client`) and can be imported
+    directly into Postman, Insomnia, or an OpenAPI code generator.
+
+    ## Authentication
+
+    Every request carries an API token as a bearer token:
+
+    ```
+    Authorization: Bearer bbp_<your-token>
+    ```
+
+    Two token flavours authorise through the same per-feature access model:
+
+    - **Organisation tokens** (`bbp_...`) - created in the portal under
+      *Firma -> API-Zugriff*, bound to one organisation, carry an explicit
+      `{feature: none|view|full}` grant map plus the `send`/`bank` capabilities.
+    - **User tokens** - minted by `POST /auth/login`; act as the signed-in user
+      across all their organisations (owner = Full on every feature). Select an
+      organisation per request with `?organisation=<uuid>` (optional when the
+      user has exactly one).
+
+    ## Permissions & capabilities
+
+    Each entity maps to one member feature. Read/PDF actions need the feature at
+    **View**; every mutation needs **Full**. On top of that, two boolean
+    capabilities gate third-party effects, default **OFF** for everyone except
+    the organisation owner:
+
+    - `send` - emailing a customer (quote/invoice issue + send).
+    - `bank` - moving money / marking paid (invoice `set-paid`).
+
+    A missing capability returns 403 with `error.key` `send_not_permitted` /
+    `bank_not_permitted`.
+
+    ## Conventions
+
+    - **IDs** are opaque UUID strings; integer ids are never exposed.
+    - **Lists** are paginated (`limit` default 100, max 500) and return
+      `{ data, total, limit, offset }`.
+    - **Dates** are ISO-8601: calendar-day fields (`issue_date`, `due_date`,
+      `valid_until`, `first_run_date`) are `YYYY-MM-DD`; timestamps are full
+      offset datetimes. Unset dates are `null`.
+    - **Amounts** are decimal net numbers; `tax_multiplier` is a percentage.
+    - **Errors** have the shape `{ "error": { code, message, key } }`; branch on
+      the stable `key`.
+  license:
+    name: MIT
+    url: https://github.com/petarbeck/beckonbilling-api-client/blob/main/LICENSE
+  contact:
+    name: Beckon Billing
+    url: https://www.beckonbilling.com
+
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: portal.beckonbilling.com
+        description: Your Beckon Billing portal host.
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: User-token authentication (no organisation scope).
+  - name: Customers
+  - name: Article categories
+  - name: Articles
+  - name: Quotes
+  - name: Outbound invoices
+  - name: Recurring invoices
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Self-registration (pending account + activation email)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+                language: { type: string, example: de }
+      responses:
+        "200":
+          description: Registration accepted.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in and mint a user token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                tfa_code: { type: string, description: TOTP, recovery, or emailed fallback code. }
+                remember_device: { type: boolean }
+                device_token: { type: string, description: A previously issued 30-day trusted-device token. }
+      responses:
+        "200":
+          description: Authenticated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  device_token: { type: string, nullable: true }
+                  user: { type: object, additionalProperties: true }
+                  organisations:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+        "401":
+          description: Bad credentials, or `error.key = tfa_required` until a `tfa_code` is supplied.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user + accessible organisations (session restore)
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of customers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "200":
+          description: The created customer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Customers]
+      summary: Read one customer
+      responses:
+        "200":
+          description: The customer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Customers]
+      summary: Update a customer (partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "200":
+          description: The updated customer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+    delete:
+      tags: [Customers]
+      summary: Soft-delete a customer
+      responses:
+        "200": { description: Deleted. }
+
+  /article-categories:
+    get:
+      tags: [Article categories]
+      summary: List article categories
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of categories.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleCategoryList" }
+    post:
+      tags: [Article categories]
+      summary: Create a category
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string }
+                fibu_code: { type: string }
+      responses:
+        "200":
+          description: The created category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleCategory" }
+
+  /article-categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Article categories]
+      summary: Read one category
+      responses:
+        "200":
+          description: The category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleCategory" }
+    put:
+      tags: [Article categories]
+      summary: Update a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string }
+                fibu_code: { type: string }
+      responses:
+        "200":
+          description: The updated category.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleCategory" }
+    delete:
+      tags: [Article categories]
+      summary: Soft-delete a category
+      responses:
+        "200": { description: Deleted. }
+
+  /articles:
+    get:
+      tags: [Articles]
+      summary: List articles
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of articles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleList" }
+    post:
+      tags: [Articles]
+      summary: Create an article
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticleInput" }
+      responses:
+        "200":
+          description: The created article.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+
+  /articles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Articles]
+      summary: Read one article
+      responses:
+        "200":
+          description: The article.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+    put:
+      tags: [Articles]
+      summary: Update an article (partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticleInput" }
+      responses:
+        "200":
+          description: The updated article.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Article" }
+    delete:
+      tags: [Articles]
+      summary: Soft-delete an article
+      responses:
+        "200": { description: Deleted. }
+
+  /quotes:
+    get:
+      tags: [Quotes]
+      summary: List quotes
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of quotes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuoteList" }
+    post:
+      tags: [Quotes]
+      summary: Create a draft quote
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "200":
+          description: The created draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+
+  /quotes/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Quotes]
+      summary: Read one quote (incl. positions)
+      responses:
+        "200":
+          description: The quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+    put:
+      tags: [Quotes]
+      summary: Update a quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "200":
+          description: The updated quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+    delete:
+      tags: [Quotes]
+      summary: Soft-delete a quote
+      responses:
+        "200": { description: Deleted. }
+
+  /quotes/{id}/issue:
+    post:
+      tags: [Quotes]
+      summary: Issue a draft (assigns the number)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The issued quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+
+  /quotes/{id}/send:
+    post:
+      tags: [Quotes]
+      summary: Email the quote (requires the `send` capability)
+      description: Issues drafts first and resets a won/lost quote back to issued.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document_ids:
+                  type: array
+                  items: { type: string }
+                  description: Override the attached documents for this send (empty = attach none).
+      responses:
+        "200":
+          description: The sent quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "403":
+          description: Missing `send` capability (`error.key = send_not_permitted`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /quotes/{id}/convert:
+    post:
+      tags: [Quotes]
+      summary: Create a draft invoice from the quote
+      description: Requires `quotes` Full and `outbound_invoices` Full.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The new invoice id + the (converted) quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invoice_id: { type: string }
+                  quote: { $ref: "#/components/schemas/Quote" }
+
+  /quotes/{id}/pdf:
+    get:
+      tags: [Quotes]
+      summary: Download the final PDF (409 for drafts)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /outbound-invoices:
+    get:
+      tags: [Outbound invoices]
+      summary: List invoices
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - { name: status, in: query, schema: { type: string, enum: [draft, issued] } }
+        - { name: paid, in: query, schema: { type: integer, enum: [0, 1] } }
+        - { name: sent, in: query, schema: { type: integer, enum: [0, 1] } }
+        - { name: cancelled, in: query, schema: { type: integer, enum: [0, 1] } }
+        - { name: customer_id, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string }, description: Free-text search. }
+      responses:
+        "200":
+          description: A page of invoices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoiceList" }
+    post:
+      tags: [Outbound invoices]
+      summary: Create a draft invoice
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutboundInvoiceInput" }
+      responses:
+        "200":
+          description: The created draft.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+
+  /outbound-invoices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Outbound invoices]
+      summary: Read one invoice (incl. positions)
+      responses:
+        "200":
+          description: The invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+    put:
+      tags: [Outbound invoices]
+      summary: Update a draft (full) or an issued invoice (limited fields)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutboundInvoiceInput" }
+      responses:
+        "200":
+          description: The updated invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+    delete:
+      tags: [Outbound invoices]
+      summary: Delete a draft (409 for issued - cancel instead)
+      responses:
+        "200": { description: Deleted. }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /outbound-invoices/{id}/issue:
+    post:
+      tags: [Outbound invoices]
+      summary: Issue the draft and auto-send it (requires the `send` capability)
+      description: Assigns the number, exports the PDF and mails it. A `send_error` field on the result means mailing failed.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document_ids: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: The issued invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /outbound-invoices/{id}/send:
+    post:
+      tags: [Outbound invoices]
+      summary: (Re-)send an issued invoice (requires the `send` capability)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document_ids: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: The sent invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /outbound-invoices/{id}/cancel:
+    post:
+      tags: [Outbound invoices]
+      summary: Cancel an issued invoice (creates the credit note)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The cancelled invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+
+  /outbound-invoices/{id}/set-paid:
+    put:
+      tags: [Outbound invoices]
+      summary: Record / remove an untracked payment (requires the `bank` capability)
+      description: >
+        `true` records an untracked payment over the open amount; `false`
+        removes the paid mark and is refused (409) while transaction-linked
+        payments exist.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paid]
+              properties:
+                paid: { type: boolean }
+      responses:
+        "200":
+          description: The invoice with recomputed paid state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /outbound-invoices/{id}/pdf:
+    get:
+      tags: [Outbound invoices]
+      summary: Download the final PDF (409 for drafts)
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /recurring-invoices:
+    get:
+      tags: [Recurring invoices]
+      summary: List recurring invoices
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of recurring invoices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecurringInvoiceList" }
+    post:
+      tags: [Recurring invoices]
+      summary: Create a recurring invoice
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecurringInvoiceInput" }
+      responses:
+        "200":
+          description: The created recurring invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecurringInvoice" }
+
+  /recurring-invoices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Recurring invoices]
+      summary: Read one recurring invoice
+      responses:
+        "200":
+          description: The recurring invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecurringInvoice" }
+    put:
+      tags: [Recurring invoices]
+      summary: Update a recurring invoice (partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecurringInvoiceInput" }
+      responses:
+        "200":
+          description: The updated recurring invoice.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecurringInvoice" }
+    delete:
+      tags: [Recurring invoices]
+      summary: Soft-delete a recurring invoice
+      responses:
+        "200": { description: Deleted. }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: An organisation token (`bbp_...`) or a user token.
+
+  parameters:
+    organisation:
+      name: organisation
+      in: query
+      required: false
+      description: Organisation UUID. Required for user tokens with more than one organisation.
+      schema: { type: string }
+    id:
+      name: id
+      in: path
+      required: true
+      description: The resource UUID.
+      schema: { type: string }
+    limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, default: 100, maximum: 500, minimum: 1 }
+    offset:
+      name: offset
+      in: query
+      required: false
+      schema: { type: integer, default: 0, minimum: 0 }
+
+  responses:
+    Error:
+      description: Error envelope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: integer }
+            message: { type: string }
+            key: { type: string, description: Stable slug to branch on. }
+
+    Pagination:
+      type: object
+      properties:
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    Position:
+      type: object
+      description: A document line item.
+      properties:
+        title: { type: string }
+        description: { type: string }
+        quantity: { type: number }
+        price: { type: number, description: Net unit price. }
+        tax_multiplier: { type: number, description: Percentage, e.g. 20. }
+        article_id: { type: string, nullable: true, description: Source catalog article UUID (0/absent for free text). }
+        fibu_code: { type: string, nullable: true }
+        discount_type: { type: string, enum: [none, percent, amount], default: none }
+        discount_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
+        commission_eligible: { type: boolean }
+
+    Recipient:
+      type: object
+      properties:
+        type: { type: string, enum: [business, consumer] }
+        company_name: { type: string }
+        attention: { type: string }
+        salutation: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        address: { type: string }
+        zip: { type: string }
+        city: { type: string }
+        country: { type: string, description: ISO-2 country code. }
+        vat_id: { type: string }
+        email: { type: string }
+        additional: { type: string }
+
+    ReferenceField:
+      type: object
+      properties:
+        label: { type: string }
+        value: { type: string }
+
+    Customer:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        label: { type: string }
+        customer_type: { type: string, enum: [business, consumer] }
+        company_name: { type: string }
+        attention: { type: string }
+        salutation: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        customer_info: { type: string }
+        recipient: { $ref: "#/components/schemas/Recipient" }
+        billing_email_address: { type: string }
+        contact_name: { type: string }
+        contact_email: { type: string }
+        contact_phone: { type: string, description: E.164, e.g. "+436601791301". }
+        reverse_charge: { type: boolean }
+        balance: { type: number, description: Signed; positive = customer holds credit. }
+        risk_level: { type: integer, description: Read-only dunning risk indicator. }
+
+    CustomerInput:
+      type: object
+      additionalProperties: true
+      properties:
+        label: { type: string }
+        customer_type: { type: string, enum: [business, consumer], default: business }
+        company_name: { type: string }
+        attention: { type: string }
+        salutation: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        customer_info: { type: string }
+        billing_email_address: { type: string }
+        billing_email_name: { type: string }
+        contact_name: { type: string }
+        contact_email: { type: string }
+        contact_phone: { type: string }
+        reverse_charge: { type: boolean }
+
+    CustomerList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Customer" }
+
+    ArticleCategory:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        label: { type: string }
+        fibu_code: { type: string }
+
+    ArticleCategoryList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ArticleCategory" }
+
+    Article:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        price: { type: number }
+        tax_multiplier: { type: number }
+        article_group_id: { type: string }
+        fibu_code: { type: string }
+        commission_eligible: { type: boolean }
+
+    ArticleInput:
+      type: object
+      additionalProperties: true
+      properties:
+        title: { type: string }
+        description: { type: string }
+        price: { type: number }
+        tax_multiplier: { type: number }
+        article_group_id: { type: string }
+        fibu_code: { type: string }
+        commission_eligible: { type: boolean }
+
+    ArticleList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Article" }
+
+    Quote:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        public_index: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [draft, issued, won, lost, converted] }
+        customer_id: { type: string }
+        recipient: { $ref: "#/components/schemas/Recipient" }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+        valid_until: { type: string, format: date, nullable: true }
+        intro_text: { type: string }
+        footer_comment: { type: string }
+        reference_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
+        reverse_charge: { type: boolean }
+        net_total: { type: number }
+        tax_total: { type: number }
+        gross_total: { type: number }
+
+    QuoteInput:
+      type: object
+      additionalProperties: true
+      properties:
+        customer_id: { type: string }
+        customer_info: { type: string }
+        billing_email_address: { type: string }
+        intro_text: { type: string }
+        footer_comment: { type: string }
+        meta_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
+        reverse_charge: { type: boolean }
+        valid_until: { type: string, format: date }
+        version: { type: integer, minimum: 1, maximum: 99 }
+        status: { type: string, enum: [issued, won, lost] }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+
+    QuoteList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Quote" }
+
+    OutboundInvoice:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        public_index: { type: string }
+        status: { type: string, enum: [draft, issued] }
+        customer_id: { type: string }
+        recipient: { $ref: "#/components/schemas/Recipient" }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+        issue_date: { type: string, format: date, nullable: true }
+        due_date: { type: string, format: date, nullable: true }
+        paid: { type: boolean }
+        paid_amount: { type: number }
+        remaining_amount: { type: number }
+        credit_note: { type: boolean }
+        reverse_charge: { type: boolean }
+        sent_at: { type: string, format: date-time, nullable: true }
+        net_total: { type: number }
+        tax_total: { type: number }
+        gross_total: { type: number }
+        partner_id: { type: string, nullable: true }
+        send_error: { type: string, description: Present only if issue/send mailing failed. }
+
+    OutboundInvoiceInput:
+      type: object
+      additionalProperties: true
+      properties:
+        customer_id: { type: string }
+        customer_info: { type: string }
+        billing_email_address: { type: string }
+        due_date: { type: string, format: date }
+        reverse_charge: { type: boolean }
+        credit_note: { type: boolean }
+        intro_text: { type: string }
+        footer_comment: { type: string }
+        invoice_comment: { type: string }
+        meta_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+
+    OutboundInvoiceList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/OutboundInvoice" }
+
+    RecurringInvoice:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        label: { type: string }
+        customer_id: { type: string }
+        partner_id: { type: string, nullable: true }
+        active: { type: boolean }
+        interval: { type: string, enum: [daily, weekly, monthly, yearly] }
+        first_run_date: { type: string, format: date, nullable: true }
+        next_run_at: { type: string, format: date-time, nullable: true, description: Derived, read-only. }
+        due_days: { type: integer }
+        payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT] }
+        tax_label: { type: string }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+
+    RecurringInvoiceInput:
+      type: object
+      additionalProperties: true
+      properties:
+        label: { type: string }
+        customer_id: { type: string }
+        partner_id: { type: string }
+        active: { type: boolean }
+        interval: { type: string, enum: [daily, weekly, monthly, yearly] }
+        first_run_date: { type: string, format: date }
+        due_days: { type: integer }
+        payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT] }
+        tax_label: { type: string }
+        positions:
+          type: array
+          items: { $ref: "#/components/schemas/Position" }
+
+    RecurringInvoiceList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/RecurringInvoice" }
