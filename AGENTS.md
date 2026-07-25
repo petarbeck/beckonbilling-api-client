@@ -214,7 +214,7 @@ organisation owner sets them in the portal per token.
 $invoice = $client->outboundInvoices->create([
     'customer_id' => $customerId,
     'positions'   => [
-        ['title' => 'Consulting', 'quantity' => 1, 'price' => 1000, 'tax_multiplier' => 20],
+        ['title' => 'Consulting', 'quantity' => 1, 'price' => 1000, 'tax_percent' => 20],
     ],
 ]);
 $issued = $client->outboundInvoices->issue($invoice->id()); // needs `send`
@@ -231,7 +231,7 @@ $newInvoiceId = $result['invoice_id'];
 $client->recurringInvoices->create([
     'label' => 'Hosting', 'customer_id' => $customerId,
     'interval' => 'monthly', 'first_run_date' => '2026-08-01',
-    'positions' => [['title' => 'Hosting', 'quantity' => 1, 'price' => 20, 'tax_multiplier' => 20]],
+    'positions' => [['title' => 'Hosting', 'quantity' => 1, 'price' => 20, 'tax_percent' => 20]],
 ]);
 ```
 
@@ -241,7 +241,7 @@ $client->recurringInvoices->create([
 - Dates: calendar-day fields (`issue_date`, `due_date`, `valid_until`,
   `first_run_date`) are `YYYY-MM-DD`; timestamps are ISO offset datetimes; unset
   = `null`.
-- Amounts are decimal net numbers; `tax_multiplier` is a percent (e.g. `20`).
+- Amounts are decimal net numbers; `tax_percent` is a percent (e.g. `20`).
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
 - Phone fields are E.164 (`+436601791301`).

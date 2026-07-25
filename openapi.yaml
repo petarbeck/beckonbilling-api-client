@@ -48,7 +48,7 @@ info:
     - **Dates** are ISO-8601: calendar-day fields (`issue_date`, `due_date`,
       `valid_until`, `first_run_date`) are `YYYY-MM-DD`; timestamps are full
       offset datetimes. Unset dates are `null`.
-    - **Amounts** are decimal net numbers; `tax_multiplier` is a percentage.
+    - **Amounts** are decimal net numbers; `tax_percent` is a percentage.
     - **Errors** have the shape `{ "error": { code, message, key } }`; branch on
       the stable `key`.
   license:
@@ -799,7 +799,7 @@ components:
         description: { type: string }
         quantity: { type: number }
         price: { type: number, description: Net unit price. }
-        tax_multiplier: { type: number, description: Percentage, e.g. 20. }
+        tax_percent: { type: number, description: Percentage, e.g. 20. }
         article_id: { type: string, nullable: true, description: Source catalog article UUID (0/absent for free text). }
         fibu_code: { type: string, nullable: true }
         discount_type: { type: string, enum: [none, percent, amount], default: none }
@@ -904,7 +904,7 @@ components:
         title: { type: string }
         description: { type: string }
         price: { type: number }
-        tax_multiplier: { type: number }
+        tax_percent: { type: number }
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
@@ -916,7 +916,7 @@ components:
         title: { type: string }
         description: { type: string }
         price: { type: number }
-        tax_multiplier: { type: number }
+        tax_percent: { type: number }
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
