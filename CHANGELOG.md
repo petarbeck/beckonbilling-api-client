@@ -5,6 +5,13 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `paid_at` on the outbound-invoice payload (`openapi.yaml`, `AGENTS.md`,
+  `Model\OutboundInvoice` docblock). Derived settlement date: null until the
+  invoice is fully paid, then the settling payment's own date (so a back-dated
+  payment records a truthful date), cleared again if it falls back to partially
+  paid. Read-only; no client method changes.
+
 ## [0.1.0] - 2026-07-24
 
 Initial release.

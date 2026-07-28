@@ -122,6 +122,13 @@ Resource properties and their models:
 ->pdf(string $id, array $options = []): string                              // raw PDF bytes (409 for drafts)
 ```
 
+Paid state is read back as four derived, never-writable fields: `paid` (bool),
+`paid_amount`, `remaining_amount`, and `paid_at`. `paid_at` is null until the
+invoice is **fully** settled, then holds the date of the payment that settled it
+(the payment's own date, so a back-dated payment records a truthful settlement
+date - not the recording time); it is cleared again if the invoice drops back to
+partially paid.
+
 ### List filters
 
 - `outboundInvoices->list()` filters: `status` (draft|issued), `paid` (0|1),

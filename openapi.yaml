@@ -999,6 +999,15 @@ components:
         due_date: { type: string, format: date, nullable: true }
         paid: { type: boolean }
         paid_amount: { type: number }
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: >
+            Settlement date, derived and never writable. Null until the invoice is
+            fully paid, then the date of the payment that settled it (the payment's
+            own date, not the recording time). Cleared again if the invoice falls
+            back to partially paid.
         remaining_amount: { type: number }
         credit_note: { type: boolean }
         reverse_charge: { type: boolean }

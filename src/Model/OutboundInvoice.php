@@ -18,6 +18,7 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $due_date          ISO YYYY-MM-DD.
  * @property-read bool|null   $paid              Derived from payment records.
  * @property-read float|null  $paid_amount
+ * @property-read string|null $paid_at           ISO datetime; null until fully paid.
  * @property-read float|null  $remaining_amount
  * @property-read bool|null   $credit_note       Derived: true when positions net negative.
  * @property-read bool|null   $reverse_charge
