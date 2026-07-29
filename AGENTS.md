@@ -263,6 +263,12 @@ $client->recurringInvoices->create([
   preset supply the window.
 - Quotes support a down payment: `deposit_type`/`deposit_value` in, resolved
   `deposit_amount` + `remaining_amount` out.
+- Quotes and invoices carry `small_business` (the issuer's Kleinunternehmer VAT
+  exemption, snapshotted) and `vat_exemption_note`. When the flag is true the
+  document must be rendered with a **single total plus that note, instead of a
+  net/VAT breakdown** - showing it as an ordinary 0 % document is legally wrong.
+  The note's citation differs per issuer country and follows the organisation's
+  language; print it as given.
 - Phone fields are E.164 (`+436601791301`).
 - `public_index` (document number) is an opaque string.
 - Recipient is a structured object; `customer_type`/`type` is `business` or

@@ -967,6 +967,23 @@ components:
             from the organisation's selected or default terms preset. Editing or
             deleting the preset never changes an issued document.
         document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
+        small_business:
+          type: boolean
+          description: >-
+            The issuer's small-business (Kleinunternehmer) VAT exemption,
+            snapshotted at creation - an issued document keeps the status that
+            applied when it was issued.
+        vat_exemption_note:
+          type: string
+          nullable: true
+          description: >-
+            The statutory sentence to print when `small_business` is true; null
+            otherwise. **An exempt document must show a single total and this
+            note INSTEAD of a net/VAT breakdown** - rendering it like an ordinary
+            0 % document is legally wrong. The citation differs per issuer
+            country (AT, DE, CH, plus a neutral fallback) and follows the
+            organisation's language, so print it as given rather than deriving
+            your own.
         deposit_type: { type: string, enum: [none, percent, amount], default: none }
         deposit_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
         deposit_amount: { type: number, description: "Resolved down payment, capped to [0, gross_total]." }
@@ -1045,6 +1062,23 @@ components:
             creation from the organisation's selected or default terms preset.
             Editing or deleting the preset never changes an issued document.
         document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
+        small_business:
+          type: boolean
+          description: >-
+            The issuer's small-business (Kleinunternehmer) VAT exemption,
+            snapshotted at creation - an issued document keeps the status that
+            applied when it was issued.
+        vat_exemption_note:
+          type: string
+          nullable: true
+          description: >-
+            The statutory sentence to print when `small_business` is true; null
+            otherwise. **An exempt document must show a single total and this
+            note INSTEAD of a net/VAT breakdown** - rendering it like an ordinary
+            0 % document is legally wrong. The citation differs per issuer
+            country (AT, DE, CH, plus a neutral fallback) and follows the
+            organisation's language, so print it as given rather than deriving
+            your own.
         sent_at: { type: string, format: date-time, nullable: true }
         net_total: { type: number }
         tax_total: { type: number }

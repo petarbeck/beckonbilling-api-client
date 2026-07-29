@@ -5,6 +5,21 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-29
+
+### Added
+- `small_business` + `vat_exemption_note` on quotes and outbound invoices.
+  A Kleinunternehmer document legally shows a single total and a statutory note
+  instead of a net/VAT breakdown; until now the wire carried neither, so a
+  consumer rendering its own document saw only `tax_total: 0` and could not tell
+  an exempt document from an ordinary 0 % one - and would render a legally wrong
+  document. The note is emitted alongside the flag because the citation differs
+  per issuer country (AT, DE, CH, neutral fallback) and follows the
+  organisation's language; deriving it client-side means reimplementing tax law
+  per market. Both read-only; null note when not exempt.
+
+  Requires portal build `17c6cf5` or later.
+
 ## [0.3.0] - 2026-07-29
 
 ### Added

@@ -23,6 +23,10 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read bool|null   $credit_note       Derived: true when positions net negative.
  * @property-read bool|null   $reverse_charge
  * @property-read string|null $terms_text      Snapshotted payment terms (from the org's terms preset).
+ * @property-read bool|null   $small_business  Issuer's Kleinunternehmer VAT exemption, snapshotted.
+ * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
+ *                                             An exempt document shows a single total and this note
+ *                                             INSTEAD of a net/VAT breakdown.
  * @property-read string|null $document_term_id Provenance only - the preset the text came from.
  * @property-read string|null $sent_at           ISO datetime.
  * @property-read float|null  $net_total
