@@ -805,6 +805,15 @@ components:
         discount_type: { type: string, enum: [none, percent, amount], default: none }
         discount_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
         commission_eligible: { type: boolean }
+        unit: { type: string, description: "Short unit printed after the quantity, e.g. \"h\", \"Stk.\"." }
+        unit_plural:
+          type: string
+          description: >-
+            Form printed once the quantity leaves 1 ("12 Monate"). Empty means the
+            unit does not inflect ("8 h") and `unit` prints unchanged. Snapshotted
+            on the position, so renaming or deleting a unit never re-inflects an
+            issued document. Resolved server-side - send `unit` and leave this
+            empty to have it filled in.
 
     Recipient:
       type: object
@@ -905,6 +914,7 @@ components:
         description: { type: string }
         price: { type: number }
         tax_percent: { type: number }
+        unit: { type: string, description: "Default short unit for lines created from this article, e.g. \"h\", \"Stk.\"." }
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
@@ -950,6 +960,17 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
         reverse_charge: { type: boolean }
+        terms_text:
+          type: string
+          description: >-
+            The effective terms text, snapshotted onto the document at creation
+            from the organisation's selected or default terms preset. Editing or
+            deleting the preset never changes an issued document.
+        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
+        deposit_type: { type: string, enum: [none, percent, amount], default: none }
+        deposit_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
+        deposit_amount: { type: number, description: "Resolved down payment, capped to [0, gross_total]." }
+        remaining_amount: { type: number, description: gross_total minus deposit_amount. }
         net_total: { type: number }
         tax_total: { type: number }
         gross_total: { type: number }
@@ -967,7 +988,13 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
         reverse_charge: { type: boolean }
-        valid_until: { type: string, format: date }
+        valid_until:
+          type: string
+          format: date
+          description: >-
+            Omit to let the organisation's default terms preset set the validity
+            window. An organisation with no default preset falls back to its
+            quote validity setting.
         version: { type: integer, minimum: 1, maximum: 99 }
         status: { type: string, enum: [issued, won, lost] }
         positions:
@@ -1011,6 +1038,13 @@ components:
         remaining_amount: { type: number }
         credit_note: { type: boolean }
         reverse_charge: { type: boolean }
+        terms_text:
+          type: string
+          description: >-
+            The effective payment terms, snapshotted onto the document at
+            creation from the organisation's selected or default terms preset.
+            Editing or deleting the preset never changes an issued document.
+        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
         sent_at: { type: string, format: date-time, nullable: true }
         net_total: { type: number }
         tax_total: { type: number }
@@ -1062,6 +1096,12 @@ components:
         due_days: { type: integer }
         payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT] }
         tax_label: { type: string }
+        terms_text:
+          type: string
+          description: >-
+            The effective payment terms. Copied onto every invoice this template
+            generates, alongside the attached documents.
+        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }

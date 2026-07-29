@@ -19,6 +19,8 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read int|null    $due_days
  * @property-read string|null $payment_method   "BANK_TRANSFER" | "DIRECT_DEBIT".
  * @property-read string|null $tax_label
+ * @property-read string|null $terms_text      Payment terms copied onto every generated invoice.
+ * @property-read string|null $document_term_id Provenance only - the preset the text came from.
  * @property-read array|null  $positions
  */
 final class RecurringInvoice extends Entity

@@ -22,6 +22,8 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read float|null  $remaining_amount
  * @property-read bool|null   $credit_note       Derived: true when positions net negative.
  * @property-read bool|null   $reverse_charge
+ * @property-read string|null $terms_text      Snapshotted payment terms (from the org's terms preset).
+ * @property-read string|null $document_term_id Provenance only - the preset the text came from.
  * @property-read string|null $sent_at           ISO datetime.
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total

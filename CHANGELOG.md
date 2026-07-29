@@ -5,12 +5,40 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-29
+
 ### Added
 - `paid_at` on the outbound-invoice payload (`openapi.yaml`, `AGENTS.md`,
   `Model\OutboundInvoice` docblock). Derived settlement date: null until the
   invoice is fully paid, then the settling payment's own date (so a back-dated
   payment records a truthful date), cleared again if it falls back to partially
   paid. Read-only; no client method changes.
+- `unit` + `unit_plural` on every position, and `unit` on articles. Send `unit`
+  and leave the plural empty - the server resolves it from the organisation's
+  unit vocabulary and snapshots it onto the line, so renaming or deleting a unit
+  never re-inflects an issued document. An empty plural means the unit does not
+  inflect (`8 h`).
+- `terms_text` + `document_term_id` on quotes, outbound invoices and recurring
+  invoices. The effective payment/validity terms, snapshotted from the
+  organisation's default terms preset at creation; the id is provenance only.
+  Omit `valid_until`/`due_date` on create to let the preset supply the window.
+- `deposit_type`, `deposit_value`, `deposit_amount` and `remaining_amount` on
+  quotes (down payment).
+
+### Note
+
+These fields were already being returned by the API - this release documents
+them. Purely additive: no request or response shape changed, and no client
+method signature changed.
+
+## [0.2.0] - 2026-07-25
+
+### Changed
+- **Breaking:** `tax_multiplier` is now `tax_percent` on positions and articles,
+  matching a hard rename on the server (no dual-key period). The meaning is
+  unchanged - it always was a percentage (`20` = 20 %), which is exactly why the
+  old name was wrong. Stored positions on pre-existing documents keep the old
+  key internally; the server maps it on read, so historic VAT is unaffected.
 
 ## [0.1.0] - 2026-07-24
 

@@ -19,6 +19,12 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $footer_comment  PDF footer.
  * @property-read array|null  $reference_fields
  * @property-read bool|null   $reverse_charge
+ * @property-read string|null $terms_text      Snapshotted payment/validity terms (from the org's terms preset).
+ * @property-read string|null $document_term_id Provenance only - the preset the text came from.
+ * @property-read string|null $deposit_type    "none" | "percent" | "amount".
+ * @property-read float|null  $deposit_value   Percent 0-100 for "percent", else a EUR amount.
+ * @property-read float|null  $deposit_amount  Resolved down payment, capped to [0, gross_total].
+ * @property-read float|null  $remaining_amount gross_total minus deposit_amount.
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total
  * @property-read float|null  $gross_total

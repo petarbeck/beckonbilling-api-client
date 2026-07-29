@@ -251,6 +251,18 @@ $client->recurringInvoices->create([
 - Amounts are decimal net numbers; `tax_percent` is a percent (e.g. `20`).
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
+- Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the
+  form printed once the quantity leaves 1, e.g. `Monate`). Send `unit` and leave
+  `unit_plural` empty - the server resolves it from the organisation's unit
+  vocabulary and snapshots it, so renaming a unit never re-inflects an issued
+  document. An empty plural means the unit does not inflect (`8 h`).
+- Quotes and invoices carry `terms_text`: the effective payment/validity terms,
+  snapshotted from the organisation's default terms preset at creation.
+  `document_term_id` is provenance only. Editing or deleting a preset never
+  changes an issued document. Omit `valid_until`/`due_date` on create to let the
+  preset supply the window.
+- Quotes support a down payment: `deposit_type`/`deposit_value` in, resolved
+  `deposit_amount` + `remaining_amount` out.
 - Phone fields are E.164 (`+436601791301`).
 - `public_index` (document number) is an opaque string.
 - Recipient is a structured object; `customer_type`/`type` is `business` or
