@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-07-30
+
+### Added
+- **Billing modality on positions**: `billing_mode` (`one_time` | `recurring`)
+  and `recurring_interval` (`monthly` | `quarterly` | `yearly`). A quote can now
+  offer one-time and recurring work together; its summary is split per modality
+  instead of printing one combined total that adds a one-off charge to a monthly
+  one. Defaults to `one_time`, so omitting both reproduces the previous
+  behaviour exactly.
+- The same two fields on **`Article`**, as the default a quote line inherits
+  when it is created from the catalog.
+- **Per-position `line_net`, `line_tax`, `line_gross`** (read-only). Do NOT
+  re-derive line money as `quantity * price`: it is wrong for any line carrying a
+  discount, and the tax applies to the discounted net. Emitting these removes the
+  need for a second copy of that math in every client.
+- `due_days` on the outbound-invoice payload - accepted on write and driving
+  `due_date` all along, but never returned, so an editor had to back-compute the
+  payment term.
+
+### Changed
+- **`POST /quotes/{id}/convert` was documented wrongly.** It returns **201**
+  with **`outbound_invoice_id`**, not 200 with `invoice_id` - the key has not
+  existed since the Invoice -> OutboundInvoice rename. Corrected.
+- The same action now answers **409 `quote_is_recurring_only`** for a quote whose
+  lines are all recurring: there is no one-time invoice to create, and silently
+  billing a subscription once would be worse than refusing.
+
+### Removed
+- **`structured_totals`** on quotes and outbound invoices. It let a document
+  print only its total instead of Netto / Steuer / Gesamt, but the portal had
+  already dropped the control while the API key stayed - so the three surfaces
+  disagreed about whether the feature existed. An invoice carrying VAT has to
+  state its net and its tax; the genuine exception, a VAT-exempt issuer, is
+  `small_business` and is unchanged. **Sending it now does nothing.**
+
+  Requires portal build `13e0da8` or later.
+
 ## [Unreleased]
 
 ## [0.4.0] - 2026-07-29

@@ -249,6 +249,17 @@ $client->recurringInvoices->create([
   `first_run_date`) are `YYYY-MM-DD`; timestamps are ISO offset datetimes; unset
   = `null`.
 - Amounts are decimal net numbers; `tax_percent` is a percent (e.g. `20`).
+- **Never re-derive line money.** Each position carries read-only `line_net`,
+  `line_tax` and `line_gross`. `quantity * price` is wrong for any line with a
+  discount, and the tax applies to the discounted net.
+- **`billing_mode`** (`one_time` | `recurring`, plus `recurring_interval`) marks
+  a line as a repeating fee. On a quote this splits the printed summary per
+  modality instead of adding a one-off charge to a monthly one. Converting such a
+  quote produces an invoice for the one-time lines AND a recurring invoice per
+  interval - but `POST /quotes/{id}/convert` creates only the invoice, so an
+  all-recurring quote is refused with 409 `quote_is_recurring_only`.
+- `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
+- `structured_totals` is **gone**; sending it does nothing.
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
 - Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the

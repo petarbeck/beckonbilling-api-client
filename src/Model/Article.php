@@ -16,6 +16,9 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $article_group_id  Category UUID.
  * @property-read string|null $fibu_code         Revenue/ledger account for the export.
  * @property-read bool|null   $commission_eligible
+ * @property-read string|null $billing_mode        one_time|recurring - the default modality for a
+ *                                                 quote line created from this article.
+ * @property-read string|null $recurring_interval  monthly|quarterly|yearly; only with billing_mode=recurring.
  */
 final class Article extends Entity
 {

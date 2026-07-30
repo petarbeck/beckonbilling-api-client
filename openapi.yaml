@@ -467,19 +467,25 @@ paths:
     post:
       tags: [Quotes]
       summary: Create a draft invoice from the quote
-      description: Requires `quotes` Full and `outbound_invoices` Full.
+      description: >-
+        Requires `quotes` Full and `outbound_invoices` Full.
+
+        A quote whose lines are ALL `billing_mode: recurring` has no one-time
+        invoice to create and is refused with 409 `quote_is_recurring_only` - it
+        converts to a recurring invoice, which this v1 action does not create.
+        Use the portal for a mixed or recurring-only quote.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
       responses:
-        "200":
+        "201":
           description: The new invoice id + the (converted) quote.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  invoice_id: { type: string }
+                  outbound_invoice_id: { type: string }
                   quote: { $ref: "#/components/schemas/Quote" }
 
   /quotes/{id}/pdf:
@@ -814,6 +820,38 @@ components:
             on the position, so renaming or deleting a unit never re-inflects an
             issued document. Resolved server-side - send `unit` and leave this
             empty to have it filled in.
+        billing_mode:
+          type: string
+          enum: [one_time, recurring]
+          default: one_time
+          description: >-
+            Whether the line is a single charge or a fee that repeats. Meaningful
+            on QUOTES: a quote can offer one-time and recurring work together, and
+            its summary is split per modality rather than printing one combined
+            total. Converting such a quote produces an invoice for the one-time
+            lines AND a recurring invoice per interval. Defaults to `one_time`, so
+            omitting it reproduces the previous behaviour exactly.
+        recurring_interval:
+          type: string
+          enum: [monthly, quarterly, yearly]
+          description: >-
+            Only meaningful while `billing_mode` is `recurring`; empty otherwise.
+            Defaults to `monthly` if a recurring line names none.
+        line_net:
+          type: number
+          readOnly: true
+          description: >-
+            Line total after its discount. Read-only and authoritative - do NOT
+            re-derive it as `quantity * price`, which is wrong for any line
+            carrying a discount.
+        line_tax:
+          type: number
+          readOnly: true
+          description: VAT for this line, computed on the DISCOUNTED net.
+        line_gross:
+          type: number
+          readOnly: true
+          description: line_net + line_tax.
 
     Recipient:
       type: object
