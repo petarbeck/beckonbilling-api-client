@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
-## [0.7.0] - 2026-07-31
+## [0.6.2] - 2026-07-31
 
 ### Removed
 - **`document_term_id` is no longer returned** on quotes, outbound invoices or
@@ -19,6 +19,11 @@ to [Semantic Versioning](https://semver.org/).
   instead - that is, and always was, what renders.
 
   Requires portal build `1d2ff80` or later.
+
+  > Released as a PATCH. Under this project's versioning rules MINOR and MAJOR
+  > are decided by a human, not inferred from the shape of a change - so
+  > "a removed response field is breaking, therefore minor" is not this
+  > project's rule, however standard it is elsewhere.
 
 ## [0.6.1] - 2026-07-31
 
