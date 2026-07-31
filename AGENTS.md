@@ -260,6 +260,14 @@ $client->recurringInvoices->create([
   all-recurring quote is refused with 409 `quote_is_recurring_only`.
 - `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
 - `structured_totals` is **gone**; sending it does nothing.
+- A **customer** carries default Bedingungen per document kind
+  (`quote_document_term_id` / `quote_terms_text`,
+  `invoice_document_term_id` / `invoice_terms_text`). Assigning that customer to
+  a quote or invoice applies them - text AND the day count, so `valid_until` /
+  `due_date` move with the terms. Precedence: what your request explicitly sent,
+  then the customer's default, then the organisation's. A default, never a
+  snapshot: the document takes a copy, so editing a customer cannot rewrite a
+  document that already exists.
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
 - Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the

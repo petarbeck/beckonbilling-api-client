@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-07-31
+
+### Added
+- **Per-customer Bedingungen defaults**: `quote_document_term_id` /
+  `quote_terms_text` and `invoice_document_term_id` / `invoice_terms_text` on
+  `Customer` and `CustomerInput`. Assigning the customer to a quote or an
+  outbound invoice applies them - the text AND the day count, so `valid_until` /
+  `due_date` move with the terms rather than the text claiming 60 days while the
+  date still says 14.
+
+  Precedence, highest first: what the request explicitly sent, then the
+  customer's default, then the organisation's default preset. A **default, not a
+  snapshot** - the document takes its own copy, so editing a customer never
+  rewrites a document that already exists.
+
+  The preset must belong to the same organisation and match the document kind;
+  anything else is refused rather than silently attached.
+
+  Requires portal build `572ca7e` or later.
+
 ## [0.5.0] - 2026-07-30
 
 ### Added

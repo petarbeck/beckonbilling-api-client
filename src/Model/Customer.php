@@ -25,6 +25,12 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read bool|null   $reverse_charge
  * @property-read float|null  $balance          Signed; positive = customer holds credit.
  * @property-read int|null    $risk_level       Read-only dunning risk indicator.
+ * @property-read string|null $quote_document_term_id   Bedingungen preset applied to a QUOTE when this
+ *                                                      customer is assigned. A default, not a snapshot.
+ * @property-read string|null $quote_terms_text         Negotiated wording overriding the preset's text.
+ * @property-read string|null $invoice_document_term_id The same for outbound invoices; also supplies the
+ *                                                      payment term, so due_date moves with it.
+ * @property-read string|null $invoice_terms_text
  *
  * Any other field the API returns is reachable via property/array access too.
  */

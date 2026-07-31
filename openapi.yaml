@@ -897,6 +897,31 @@ components:
         reverse_charge: { type: boolean }
         balance: { type: number, description: Signed; positive = customer holds credit. }
         risk_level: { type: integer, description: Read-only dunning risk indicator. }
+        quote_document_term_id:
+          type: string
+          nullable: true
+          description: >-
+            Bedingungen preset applied to a QUOTE when this customer is assigned
+            to one. A default, not a snapshot: the document takes its own copy,
+            so editing the customer never rewrites a document that already
+            exists. Must be a preset of kind `quote` belonging to the same
+            organisation. Null = no customer default; the organisation's default
+            preset applies instead.
+        quote_terms_text:
+          type: string
+          description: >-
+            Optional negotiated wording for this customer's quotes, overriding
+            the preset's own text. Empty = use the preset's text.
+        invoice_document_term_id:
+          type: string
+          nullable: true
+          description: >-
+            The same for OUTBOUND INVOICES; must be a preset of kind
+            `outbound_invoice`. It also supplies the payment term, so assigning
+            the customer moves `due_date` as well as the text.
+        invoice_terms_text:
+          type: string
+          description: Optional negotiated wording for this customer's invoices.
 
     CustomerInput:
       type: object
@@ -916,6 +941,31 @@ components:
         contact_email: { type: string }
         contact_phone: { type: string }
         reverse_charge: { type: boolean }
+        quote_document_term_id:
+          type: string
+          nullable: true
+          description: >-
+            Bedingungen preset applied to a QUOTE when this customer is assigned
+            to one. A default, not a snapshot: the document takes its own copy,
+            so editing the customer never rewrites a document that already
+            exists. Must be a preset of kind `quote` belonging to the same
+            organisation. Null = no customer default; the organisation's default
+            preset applies instead.
+        quote_terms_text:
+          type: string
+          description: >-
+            Optional negotiated wording for this customer's quotes, overriding
+            the preset's own text. Empty = use the preset's text.
+        invoice_document_term_id:
+          type: string
+          nullable: true
+          description: >-
+            The same for OUTBOUND INVOICES; must be a preset of kind
+            `outbound_invoice`. It also supplies the payment term, so assigning
+            the customer moves `due_date` as well as the text.
+        invoice_terms_text:
+          type: string
+          description: Optional negotiated wording for this customer's invoices.
 
     CustomerList:
       allOf:
