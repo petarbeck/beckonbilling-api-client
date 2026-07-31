@@ -888,12 +888,22 @@ components:
         salutation: { type: string }
         first_name: { type: string }
         last_name: { type: string }
-        customer_info: { type: string }
-        recipient: { $ref: "#/components/schemas/Recipient" }
-        billing_email_address: { type: string }
-        contact_name: { type: string }
-        contact_email: { type: string }
-        contact_phone: { type: string, description: E.164, e.g. "+436601791301". }
+        recipient_email: { type: string, description: Where this customer's documents are sent. }
+        recipient_email_name: { type: string }
+        cc_email: { type: string }
+        cc_email_name: { type: string }
+        contacts:
+          type: array
+          description: >-
+            Contact people. Replaced the flat contact_name / contact_email /
+            contact_phone trio; phones are E.164, e.g. "+436601791301".
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              name: { type: string }
+              email: { type: string }
+              phone: { type: string }
         reverse_charge: { type: boolean }
         balance: { type: number, description: Signed; positive = customer holds credit. }
         risk_level: { type: integer, description: Read-only dunning risk indicator. }
@@ -949,12 +959,20 @@ components:
         salutation: { type: string }
         first_name: { type: string }
         last_name: { type: string }
-        customer_info: { type: string }
-        billing_email_address: { type: string }
-        billing_email_name: { type: string }
-        contact_name: { type: string }
-        contact_email: { type: string }
-        contact_phone: { type: string }
+        recipient_email: { type: string }
+        recipient_email_name: { type: string }
+        cc_email: { type: string }
+        cc_email_name: { type: string }
+        contacts:
+          type: array
+          description: Contact people; replaced the flat contact_* trio.
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              name: { type: string }
+              email: { type: string }
+              phone: { type: string }
         reverse_charge: { type: boolean }
         quote_document_term_id:
           type: string
@@ -1072,8 +1090,7 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Position" }
         valid_until: { type: string, format: date, nullable: true }
-        intro_text: { type: string }
-        footer_comment: { type: string }
+        pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
         reference_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
@@ -1123,10 +1140,7 @@ components:
             are editable afterwards and a stored reference would go on naming a
             preset whose text no longer applies.
         customer_id: { type: string }
-        customer_info: { type: string }
-        billing_email_address: { type: string }
-        intro_text: { type: string }
-        footer_comment: { type: string }
+        pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
         meta_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
@@ -1179,7 +1193,6 @@ components:
             own date, not the recording time). Cleared again if the invoice falls
             back to partially paid.
         remaining_amount: { type: number }
-        credit_note: { type: boolean }
         reverse_charge: { type: boolean }
         terms_text:
           type: string
@@ -1225,14 +1238,8 @@ components:
             are editable afterwards and a stored reference would go on naming a
             preset whose text no longer applies.
         customer_id: { type: string }
-        customer_info: { type: string }
-        billing_email_address: { type: string }
-        due_date: { type: string, format: date }
         reverse_charge: { type: boolean }
-        credit_note: { type: boolean }
-        intro_text: { type: string }
-        footer_comment: { type: string }
-        invoice_comment: { type: string }
+        pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
         meta_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
