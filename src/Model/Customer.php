@@ -28,9 +28,11 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $quote_document_term_id   Bedingungen preset applied to a QUOTE when this
  *                                                      customer is assigned. A default, not a snapshot.
  * @property-read string|null $quote_terms_text         Negotiated wording overriding the preset's text.
+ * @property-read int|null    $quote_valid_days         Overrides the preset's days. NULL = inherit; 0 is real.
  * @property-read string|null $invoice_document_term_id The same for outbound invoices; also supplies the
  *                                                      payment term, so due_date moves with it.
  * @property-read string|null $invoice_terms_text
+ * @property-read int|null    $invoice_due_days         Overrides the preset's days. NULL = inherit; 0 is real.
  *
  * Any other field the API returns is reachable via property/array access too.
  */

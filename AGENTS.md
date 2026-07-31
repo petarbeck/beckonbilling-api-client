@@ -267,7 +267,9 @@ $client->recurringInvoices->create([
   `due_date` move with the terms. Precedence: what your request explicitly sent,
   then the customer's default, then the organisation's. A default, never a
   snapshot: the document takes a copy, so editing a customer cannot rewrite a
-  document that already exists.
+  document that already exists. The pair also carries `quote_valid_days` /
+  `invoice_due_days`, overriding the preset's day count - **null means inherit,
+  not 0**, since 0 is a real value.
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
 - Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the

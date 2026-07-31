@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-07-31
+
+### Added
+- `quote_valid_days` and `invoice_due_days` on `Customer` / `CustomerInput` -
+  the third field of the Bedingungen block, which 0.6.0 shipped without. They
+  override the preset's own day count for that customer.
+
+  **Null means inherit, not 0.** 0 is a legitimate value ("expires the same
+  day" / "due immediately"), so a null is the only way to say "no override".
+
+### Changed
+- Versioning now follows the portal's scheme (`tools/version.sh`,
+  `tools/release.sh`): MAJOR by hand and only for a breaking contract change,
+  MINOR by hand after substantial contract work and resetting PATCH, PATCH once
+  per release that ships something. The source is the **git tag** - Composer
+  derives a library's version from its tags, and a `version` key in
+  composer.json would be a second answer that can disagree.
+
 ## [0.6.0] - 2026-07-31
 
 ### Added

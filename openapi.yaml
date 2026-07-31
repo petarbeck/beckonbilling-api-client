@@ -912,6 +912,14 @@ components:
           description: >-
             Optional negotiated wording for this customer's quotes, overriding
             the preset's own text. Empty = use the preset's text.
+        quote_valid_days:
+          type: integer
+          nullable: true
+          description: >-
+            Validity in days for this customer's quotes, overriding the preset's
+            own day count. **Null means inherit** - not 0, which is a legitimate
+            value meaning "expires the same day". Send null (or omit) to clear an
+            override.
         invoice_document_term_id:
           type: string
           nullable: true
@@ -922,6 +930,13 @@ components:
         invoice_terms_text:
           type: string
           description: Optional negotiated wording for this customer's invoices.
+        invoice_due_days:
+          type: integer
+          nullable: true
+          description: >-
+            Payment term in days for this customer's invoices, overriding the
+            preset's. **Null means inherit**; 0 is a real value meaning due
+            immediately.
 
     CustomerInput:
       type: object
@@ -956,6 +971,14 @@ components:
           description: >-
             Optional negotiated wording for this customer's quotes, overriding
             the preset's own text. Empty = use the preset's text.
+        quote_valid_days:
+          type: integer
+          nullable: true
+          description: >-
+            Validity in days for this customer's quotes, overriding the preset's
+            own day count. **Null means inherit** - not 0, which is a legitimate
+            value meaning "expires the same day". Send null (or omit) to clear an
+            override.
         invoice_document_term_id:
           type: string
           nullable: true
@@ -966,6 +989,13 @@ components:
         invoice_terms_text:
           type: string
           description: Optional negotiated wording for this customer's invoices.
+        invoice_due_days:
+          type: integer
+          nullable: true
+          description: >-
+            Payment term in days for this customer's invoices, overriding the
+            preset's. **Null means inherit**; 0 is a real value meaning due
+            immediately.
 
     CustomerList:
       allOf:
