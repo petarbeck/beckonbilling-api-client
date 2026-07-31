@@ -24,7 +24,6 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
  *                                             An exempt document shows a single total and this note
  *                                             INSTEAD of a net/VAT breakdown.
- * @property-read string|null $document_term_id Provenance only - the preset the text came from.
  * @property-read string|null $deposit_type    "none" | "percent" | "amount".
  * @property-read float|null  $deposit_value   Percent 0-100 for "percent", else a EUR amount.
  * @property-read float|null  $deposit_amount  Resolved down payment, capped to [0, gross_total].

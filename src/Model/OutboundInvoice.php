@@ -27,7 +27,6 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
  *                                             An exempt document shows a single total and this note
  *                                             INSTEAD of a net/VAT breakdown.
- * @property-read string|null $document_term_id Provenance only - the preset the text came from.
  * @property-read string|null $sent_at           ISO datetime.
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total

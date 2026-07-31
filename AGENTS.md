@@ -260,6 +260,9 @@ $client->recurringInvoices->create([
   all-recurring quote is refused with 409 `quote_is_recurring_only`.
 - `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
 - `structured_totals` is **gone**; sending it does nothing.
+- **`document_term_id` is write-only.** Sending it loads that preset's text and
+  days onto the document; it is not returned, because nothing records which
+  preset was used. Read `terms_text` - that is what renders.
 - A **customer** carries default Bedingungen per document kind
   (`quote_document_term_id` / `quote_terms_text`,
   `invoice_document_term_id` / `invoice_terms_text`). Assigning that customer to

@@ -1084,7 +1084,6 @@ components:
             The effective terms text, snapshotted onto the document at creation
             from the organisation's selected or default terms preset. Editing or
             deleting the preset never changes an issued document.
-        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
         small_business:
           type: boolean
           description: >-
@@ -1114,6 +1113,15 @@ components:
       type: object
       additionalProperties: true
       properties:
+        document_term_id:
+          type: string
+          writeOnly: true
+          description: >-
+            LOAD a Bedingungen preset: its text and day count are copied onto the
+            document, which then owns its own snapshot. Write-only on purpose -
+            nothing records which preset was used, because the document's terms
+            are editable afterwards and a stored reference would go on naming a
+            preset whose text no longer applies.
         customer_id: { type: string }
         customer_info: { type: string }
         billing_email_address: { type: string }
@@ -1179,7 +1187,6 @@ components:
             The effective payment terms, snapshotted onto the document at
             creation from the organisation's selected or default terms preset.
             Editing or deleting the preset never changes an issued document.
-        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
         small_business:
           type: boolean
           description: >-
@@ -1208,6 +1215,15 @@ components:
       type: object
       additionalProperties: true
       properties:
+        document_term_id:
+          type: string
+          writeOnly: true
+          description: >-
+            LOAD a Bedingungen preset: its text and day count are copied onto the
+            document, which then owns its own snapshot. Write-only on purpose -
+            nothing records which preset was used, because the document's terms
+            are editable afterwards and a stored reference would go on naming a
+            preset whose text no longer applies.
         customer_id: { type: string }
         customer_info: { type: string }
         billing_email_address: { type: string }
@@ -1253,7 +1269,6 @@ components:
           description: >-
             The effective payment terms. Copied onto every invoice this template
             generates, alongside the attached documents.
-        document_term_id: { type: string, nullable: true, description: Provenance only - the preset the text came from. }
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
@@ -1262,6 +1277,15 @@ components:
       type: object
       additionalProperties: true
       properties:
+        document_term_id:
+          type: string
+          writeOnly: true
+          description: >-
+            LOAD a Bedingungen preset: its text and day count are copied onto the
+            document, which then owns its own snapshot. Write-only on purpose -
+            nothing records which preset was used, because the document's terms
+            are editable afterwards and a stored reference would go on naming a
+            preset whose text no longer applies.
         label: { type: string }
         customer_id: { type: string }
         partner_id: { type: string }

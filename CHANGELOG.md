@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-07-31
+
+### Removed
+- **`document_term_id` is no longer returned** on quotes, outbound invoices or
+  recurring invoices. It recorded which preset a document's terms came from, and
+  nothing read it - while contradicting the rule beside it: terms are a snapshot,
+  so a preset edit cannot change an issued document, yet the stored reference
+  went on naming a preset after the text had been edited to say something else.
+
+### Changed
+- `document_term_id` remains valid **on input**, now documented as `writeOnly`:
+  it LOADS a preset's text and day count onto the document, which then owns its
+  own snapshot. A client that was reading the field back should read `terms_text`
+  instead - that is, and always was, what renders.
+
+  Requires portal build `1d2ff80` or later.
+
 ## [0.6.1] - 2026-07-31
 
 ### Added
