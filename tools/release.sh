@@ -17,13 +17,25 @@ cd "$( dirname "$0" )/.."
 
 LEVEL="patch"
 DRY=0
+CONFIRMED=0
 for arg in "$@"; do
     case "$arg" in
         patch|minor|major) LEVEL="$arg" ;;
+        --i-decided) CONFIRMED=1 ;;
         --dry-run) DRY=1 ;;
-        *) echo "usage: $0 [patch|minor|major] [--dry-run]" >&2; exit 2 ;;
+        *) echo "usage: $0 [patch|minor|major] [--i-decided] [--dry-run]" >&2; exit 2 ;;
     esac
 done
+
+# MINOR and MAJOR are a human's call. Nothing about the shape of a change earns
+# one - not "a field was removed so it is breaking", which is semver's rule and
+# not this project's. Requiring an explicit flag is what stops that reasoning
+# from quietly substituting itself; it has already happened once.
+if [ "$LEVEL" != "patch" ] && [ "$CONFIRMED" -eq 0 ]; then
+    echo "!! $LEVEL is a human decision - re-run with --i-decided if that is what you want" >&2
+    echo "   (patch is the default, and is what a routine release should be)" >&2
+    exit 1
+fi
 
 CURRENT="$( tools/version.sh )"
 NEXT="$( tools/version.sh "$LEVEL" )"
