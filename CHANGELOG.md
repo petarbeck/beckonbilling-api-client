@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-07-31
+
+### Fixed
+- The contract no longer documents fields the API does not have. These were left
+  behind by the 2026-07-03 structured-recipient and text renames, so a client
+  writing to them got a silent no-op.
+  - `Quote.footer_comment` is `pdf_footer`.
+  - The `Customer` contact block is `recipient_email`, `recipient_email_name`,
+    `cc_email`, `cc_email_name` and `contacts` - not `billing_email_address`,
+    `contact_name`, `contact_email`, `contact_phone` or `recipient`.
+  - Removed `customer_info`, `intro_text`, `billing_email_address`,
+    `credit_note`, `due_date` and `invoice_comment` from the quote and outbound
+    invoice INPUT schemas; the API rejects all six.
+
 ## [0.6.2] - 2026-07-31
 
 ### Removed
