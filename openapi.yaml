@@ -880,6 +880,24 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode:
+          type: string
+          enum: [direct_debit, all, individual]
+          description: >-
+            How this record is settled. `direct_debit` means WE collect it under
+            a SEPA mandate and no way to pay is offered at all; `all` means the
+            customer pays by the organisation's standard setting; `individual`
+            means they pay by the ways in `payment_methods`. Direct debit is
+            deliberately not one of `payment_methods` - it is the level above
+            them, so "collect and also offer a transfer" cannot be expressed.
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
+          description: >-
+            The individual selection, used when `payment_mode` is `individual`.
+            Kept when the mode is anything else, so a record returns to these
+            ways if a mandate is revoked. Online payment is only ever offered
+            when the organisation has a working Stripe configuration.
         id: { type: string }
         label: { type: string }
         customer_type: { type: string, enum: [business, consumer] }
@@ -952,6 +970,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode: { type: string, enum: [direct_debit, all, individual] }
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
         label: { type: string }
         customer_type: { type: string, enum: [business, consumer], default: business }
         company_name: { type: string }
@@ -1171,6 +1193,24 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode:
+          type: string
+          enum: [direct_debit, all, individual]
+          description: >-
+            How this record is settled. `direct_debit` means WE collect it under
+            a SEPA mandate and no way to pay is offered at all; `all` means the
+            customer pays by the organisation's standard setting; `individual`
+            means they pay by the ways in `payment_methods`. Direct debit is
+            deliberately not one of `payment_methods` - it is the level above
+            them, so "collect and also offer a transfer" cannot be expressed.
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
+          description: >-
+            The individual selection, used when `payment_mode` is `individual`.
+            Kept when the mode is anything else, so a record returns to these
+            ways if a mandate is revoked. Online payment is only ever offered
+            when the organisation has a working Stripe configuration.
         id: { type: string }
         public_index: { type: string }
         status: { type: string, enum: [draft, issued] }
@@ -1228,6 +1268,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode: { type: string, enum: [direct_debit, all, individual] }
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
         document_term_id:
           type: string
           writeOnly: true
@@ -1260,6 +1304,24 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode:
+          type: string
+          enum: [direct_debit, all, individual]
+          description: >-
+            How this record is settled. `direct_debit` means WE collect it under
+            a SEPA mandate and no way to pay is offered at all; `all` means the
+            customer pays by the organisation's standard setting; `individual`
+            means they pay by the ways in `payment_methods`. Direct debit is
+            deliberately not one of `payment_methods` - it is the level above
+            them, so "collect and also offer a transfer" cannot be expressed.
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
+          description: >-
+            The individual selection, used when `payment_mode` is `individual`.
+            Kept when the mode is anything else, so a record returns to these
+            ways if a mandate is revoked. Online payment is only ever offered
+            when the organisation has a working Stripe configuration.
         id: { type: string }
         label: { type: string }
         customer_id: { type: string }
@@ -1284,6 +1346,10 @@ components:
       type: object
       additionalProperties: true
       properties:
+        payment_mode: { type: string, enum: [direct_debit, all, individual] }
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
         document_term_id:
           type: string
           writeOnly: true

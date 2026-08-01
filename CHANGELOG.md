@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-08-01
+
+### Added
+- **`payment_mode` and `payment_methods`** on `Customer`, `OutboundInvoice` and
+  `RecurringInvoice`, readable and writable. They replace a single preferred
+  method with two levels: `payment_mode` says WHO moves the money
+  (`direct_debit` = we collect under a SEPA mandate, `all` = the customer pays by
+  the organisation's standard setting, `individual` = they pay by the ways in
+  `payment_methods`), and `payment_methods` is that selection.
+- Direct debit is deliberately NOT one of `payment_methods`. It is the level
+  above them, because it is the only method where the creditor pulls rather than
+  the debtor pushing - a document offering both would invite a double payment.
+  With `payment_mode: direct_debit` no way to pay is offered at all.
+- `payment_methods` is kept when the mode is something else, so a record returns
+  to those ways if a mandate is revoked. `online` is only ever offered when the
+  organisation has a working Stripe configuration.
+
+### Note
+- The existing `payment_method` field is unchanged and still returned. Nothing
+  that reads it breaks.
+
 ## [0.6.3] - 2026-07-31
 
 ### Fixed
