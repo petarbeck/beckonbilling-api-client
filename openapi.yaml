@@ -1304,6 +1304,20 @@ components:
       type: object
       additionalProperties: true
       properties:
+        service_period_mode:
+          type: string
+          enum: [current, previous, ahead, behind, none]
+          description: >-
+            Which period the generated invoice states as its Leistungszeitraum.
+            `current` and `previous` NAME a calendar period and print its name -
+            with a monthly schedule `2027/07`, with a yearly one `2027`.
+            `ahead` and `behind` state a SPAN either side of the issue date and
+            always print a date range, because a term that does not follow the
+            calendar has no name: a yearly schedule issued on 2027-07-01 gives
+            `01.07.2027 - 30.06.2028` for `ahead` (prepaid) and
+            `01.07.2026 - 30.06.2027` for `behind` (in arrears). A period ends
+            the day before the next one starts, so consecutive invoices abut
+            exactly. `none` states no period at all.
         payment_mode:
           type: string
           enum: [direct_debit, all, individual]
