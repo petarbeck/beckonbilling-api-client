@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.5] - 2026-08-02
+
+### Added
+- **`service_period_mode`** documented on `RecurringInvoice`. The field has always
+  been accepted and returned by `/api/v1`; it was simply never described. It is
+  documented now because it gained two values:
+  - `ahead` - the term the invoice pays FOR, starting on its issue date
+    (prepaid). A yearly schedule issued 2027-07-01 states
+    `01.07.2027 - 30.06.2028`.
+  - `behind` - the term that just ended, billed after the fact. The same
+    schedule states `01.07.2026 - 30.06.2027`.
+
+  Both print a date RANGE, unlike `current` and `previous`, which name a
+  calendar period and print its name (`2027`, `2027/07`). A period ends the day
+  before the next one starts, so consecutive invoices abut exactly.
+
+### Note
+Still undocumented on `RecurringInvoice`: roughly a dozen further top-level
+fields the API returns. Several of them are pre-2026-07 legacy aliases
+(`email_body_text`, `email_intro_text`, `footer_comment`, `header_info_override`,
+`invoice_comment`) that should probably NOT become part of the published
+contract. Closing that gap deliberately is its own piece of work.
+
 ## [0.6.4] - 2026-08-01
 
 ### Added
