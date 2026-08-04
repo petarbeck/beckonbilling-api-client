@@ -3,6 +3,44 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.6.6] - 2026-08-04
+
+### Changed
+- **`remaining_amount` on `OutboundInvoice` is now 0 for a CANCELLED invoice.**
+  It previously reported the unpaid balance of a document that had been reversed
+  by a credit note, so a storno read as money still outstanding - to this client,
+  to the portal and to the MCP tools alike. A cancelled invoice is not a
+  receivable: whatever is still owed in either direction sits on the credit note
+  that reversed it, never on the invoice it reversed.
+
+  No money path changes. Every selector that MOVES money on the strength of this
+  figure (dunning, SEPA credit transfers, direct debit) already excluded
+  cancelled invoices, so this only makes the reported number agree with what
+  those selectors were always doing.
+
+  One behavioural consequence worth knowing: `PUT /outbound-invoices/{id}/set-paid`
+  with `paid: true` on a CANCELLED invoice no longer records a payment, because
+  there is no open amount left to settle. It still answers 200 with the invoice.
+
+### Added
+- **`settlement_status`** on `OutboundInvoice`: `draft` | `open` |
+  `partially_paid` | `paid` | `cancelled`. The settlement state as one value, so
+  it never has to be rebuilt out of `status` + `cancelled` + `paid`. That
+  rebuilding is exactly what went wrong in practice - `paid: false` on a storno
+  reads as an unpaid bill. On a credit note, `open` means a refund is still owed
+  to the customer rather than money expected from them.
+- **`cancelled`** on `OutboundInvoice`. The API has always returned it; it was
+  simply never described, so there was no documented way to tell a reversed
+  invoice from a live one.
+- **The storno pair now names itself in both directions**, so relating the two
+  documents needs no second request: `cancels_outbound_invoice_number` beside the
+  existing `cancels_outbound_invoice_id` (on the credit note), and
+  `cancelled_by_outbound_invoice_id` / `_number` (on the cancelled invoice).
+- **`OutboundInvoice::isOutstanding()`, `isCancelled()` and `settlementStatus()`**
+  on the model. `isOutstanding()` is the one to reach for: it answers "is money
+  still expected" correctly for cancelled and draft documents, which `isPaid()`
+  alone does not.
+
 ## [0.6.5] - 2026-08-02
 
 ### Added

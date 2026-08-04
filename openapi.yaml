@@ -1232,7 +1232,47 @@ components:
             fully paid, then the date of the payment that settled it (the payment's
             own date, not the recording time). Cleared again if the invoice falls
             back to partially paid.
-        remaining_amount: { type: number }
+        remaining_amount:
+          type: number
+          description: >-
+            What is still outstanding on this document. Zero once it is fully
+            paid AND zero once it is cancelled: a storno is not a receivable,
+            because the credit note that reverses it carries whatever is still
+            owed in either direction. Do not re-derive it as gross minus paid -
+            that subtraction reports a cancelled invoice as money outstanding.
+        cancelled:
+          type: boolean
+          description: >-
+            Whether this invoice was reversed by a cancellation credit note. A
+            cancelled invoice keeps its number and its `issued` status - it stays
+            part of the record - but owes nothing.
+        settlement_status:
+          type: string
+          enum: [draft, open, partially_paid, paid, cancelled]
+          description: >-
+            The settlement state as one value, so it never has to be rebuilt out
+            of `status` + `cancelled` + `paid`. Prefer it over `paid` whenever
+            you need to know whether money is still expected. On a credit note,
+            `open` means a refund is still owed to the customer rather than
+            money expected from them.
+        cancels_outbound_invoice_id:
+          type: string
+          nullable: true
+          description: On a cancellation credit note, the invoice it reverses.
+        cancels_outbound_invoice_number:
+          type: string
+          description: >-
+            The human document number behind `cancels_outbound_invoice_id`, so
+            the pair can be named without a second request. Empty when unrelated.
+        cancelled_by_outbound_invoice_id:
+          type: string
+          nullable: true
+          description: >-
+            The reverse direction: on a cancelled invoice, the credit note that
+            cancelled it. Null unless this document is cancelled.
+        cancelled_by_outbound_invoice_number:
+          type: string
+          description: The human document number behind `cancelled_by_outbound_invoice_id`.
         reverse_charge: { type: boolean }
         terms_text:
           type: string

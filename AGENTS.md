@@ -122,12 +122,28 @@ Resource properties and their models:
 ->pdf(string $id, array $options = []): string                              // raw PDF bytes (409 for drafts)
 ```
 
-Paid state is read back as four derived, never-writable fields: `paid` (bool),
-`paid_amount`, `remaining_amount`, and `paid_at`. `paid_at` is null until the
-invoice is **fully** settled, then holds the date of the payment that settled it
-(the payment's own date, so a back-dated payment records a truthful settlement
-date - not the recording time); it is cleared again if the invoice drops back to
-partially paid.
+Paid state is read back as derived, never-writable fields: `settlement_status`,
+`paid` (bool), `paid_amount`, `remaining_amount`, and `paid_at`. `paid_at` is
+null until the invoice is **fully** settled, then holds the date of the payment
+that settled it (the payment's own date, so a back-dated payment records a
+truthful settlement date - not the recording time); it is cleared again if the
+invoice drops back to partially paid.
+
+**To decide whether a document still owes money, read `settlement_status`**
+(`draft` | `open` | `partially_paid` | `paid` | `cancelled`) or
+`remaining_amount` - never `paid` on its own, and never a gross-minus-paid
+subtraction of your own. A **cancelled** invoice is not a receivable: it was
+reversed by a credit note, so it reports `remaining_amount` 0 even though `paid`
+is false and no money ever arrived. Reading `paid: false` as "outstanding" makes
+a storno look like an unpaid bill - the single most common way to misreport this
+API, and the reason `settlement_status` exists.
+
+A cancellation is a **pair**, and both halves name each other, so you never need
+a second request to relate them: the credit note carries
+`cancels_outbound_invoice_id` / `_number`, and the cancelled invoice carries
+`cancelled_by_outbound_invoice_id` / `_number`. Whatever is still owed in either
+direction lives on the credit note, never on the invoice it reversed - on a
+credit note, `open` means *you* owe the customer a refund.
 
 ### List filters
 

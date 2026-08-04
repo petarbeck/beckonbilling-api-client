@@ -59,6 +59,56 @@ final class ModelTest extends TestCase
         $this->assertFalse($draft->isPaid());
     }
 
+    /**
+     * The whole point of isOutstanding(): a cancelled invoice reports paid=false
+     * and no money ever arrived, yet nothing is owed - the credit note that
+     * reversed it carries the balance. Reading `paid` alone calls this a debt.
+     */
+    public function testCancelledInvoiceIsNotOutstanding(): void
+    {
+        $cancelled = new OutboundInvoice([
+            'id' => 'i3',
+            'status' => 'issued',
+            'paid' => false,
+            'cancelled' => true,
+            'remaining_amount' => 0.0,
+            'settlement_status' => 'cancelled',
+            'cancelled_by_outbound_invoice_number' => '2026-1166',
+        ]);
+
+        $this->assertTrue($cancelled->isCancelled());
+        $this->assertFalse($cancelled->isPaid());
+        $this->assertFalse($cancelled->isOutstanding());
+        $this->assertSame('cancelled', $cancelled->settlementStatus());
+        $this->assertSame('2026-1166', $cancelled->cancelled_by_outbound_invoice_number);
+    }
+
+    public function testOutstandingAndSettledInvoices(): void
+    {
+        $open = new OutboundInvoice([
+            'id' => 'i4', 'status' => 'issued', 'paid' => false,
+            'cancelled' => false, 'remaining_amount' => 3775.0, 'settlement_status' => 'open',
+        ]);
+        $part = new OutboundInvoice([
+            'id' => 'i5', 'status' => 'issued', 'paid' => false,
+            'cancelled' => false, 'remaining_amount' => 190.0, 'settlement_status' => 'partially_paid',
+        ]);
+        $settled = new OutboundInvoice([
+            'id' => 'i6', 'status' => 'issued', 'paid' => true,
+            'cancelled' => false, 'remaining_amount' => 0.0, 'settlement_status' => 'paid',
+        ]);
+        $draft = new OutboundInvoice([
+            'id' => 'i7', 'status' => 'draft', 'paid' => false,
+            'cancelled' => false, 'remaining_amount' => 0.0, 'settlement_status' => 'draft',
+        ]);
+
+        $this->assertTrue($open->isOutstanding());
+        $this->assertTrue($part->isOutstanding(), 'a partially paid invoice still owes the rest');
+        $this->assertFalse($settled->isOutstanding());
+        $this->assertFalse($draft->isOutstanding(), 'a draft owes nothing until it is issued');
+        $this->assertFalse($open->isCancelled());
+    }
+
     public function testCollectionPagination(): void
     {
         $collection = new Collection(
