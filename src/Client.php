@@ -24,7 +24,7 @@ use BeckonBilling\ApiClient\Resource\RecurringInvoices;
  * ]);
  *
  * foreach ($client->customers->autoPaging() as $customer) {
- *     echo $customer->label, "\n";
+ *     echo $customer->display_name, "\n";
  * }
  * ```
  *

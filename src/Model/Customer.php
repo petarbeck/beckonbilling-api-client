@@ -8,7 +8,7 @@ namespace BeckonBilling\ApiClient\Model;
  * A customer (`/api/v1/customers`).
  *
  * @property-read string      $id
- * @property-read string|null $label
+ * @property-read string|null $display_name Angezeigter Name: Firmenname bzw. Anrede + Personenname
  * @property-read string|null $customer_type   "business" | "consumer"
  * @property-read string|null $company_name
  * @property-read string|null $attention

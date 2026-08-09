@@ -157,8 +157,8 @@ credit note, `open` means *you* owe the customer a refund.
 Every read/write returns a model wrapping the JSON payload:
 
 ```php
-$customer->label;         // magic property (documented fields have @property-read hints)
-$customer['label'];       // ArrayAccess
+$customer->display_name;  // magic property (documented fields have @property-read hints)
+$customer['display_name'];// ArrayAccess
 $customer->id();          // string|null UUID
 $customer->get('x', $d);  // with default
 $customer->has('x');      // bool

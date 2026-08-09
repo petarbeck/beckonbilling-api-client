@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed (BREAKING)
+- **`Customer.label` ist entfallen**, ersetzt durch das schreibgeschuetzte
+  **`display_name`**. Die "Bezeichnung" stand als zweiter Name neben dem
+  Firmennamen und wurde durchgehend mit ihm verwechselt - Beta-Tester haben
+  regelmaessig den falschen der beiden gepflegt. `display_name` ist bei einer
+  Firma `company_name`, bei einer Privatperson `salutation` + `person_name`;
+  sortiert und gesucht wird ebenfalls danach.
+- `CustomerInput.label` ist entfallen. Ein `label` im Rumpf wird ignoriert und
+  unter `?strict=1` mit 400 abgelehnt.
+
+### Migration
+```diff
+-echo $customer->label;
++echo $customer->display_name;
+
+-$client->customers()->create([ 'label' => 'ACME', ... ]);
++$client->customers()->create([ 'company_name' => 'ACME GmbH', ... ]);
+```
+Wer bisher nur `label` gesetzt hat, setzt jetzt `company_name` (Firma) bzw.
+`salutation` + `person_name` (Privatperson).
+
 ## [0.7.0] - 2026-08-09
 
 ### Removed (BREAKING)

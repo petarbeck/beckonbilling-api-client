@@ -7,8 +7,8 @@ namespace BeckonBilling\ApiClient\Model;
 /**
  * Immutable value object wrapping one API resource's JSON payload.
  *
- * Documented fields are reachable as properties (`$customer->label`) or array
- * keys (`$customer['label']`); the full payload is always available via
+ * Documented fields are reachable as properties (`$customer->display_name`) or array
+ * keys (`$customer['display_name']`); the full payload is always available via
  * {@see self::toArray()}. Because the wrapper never declares a fixed field
  * list, new fields the API adds are reachable immediately - a consumer never
  * has to wait for a client release to read them.

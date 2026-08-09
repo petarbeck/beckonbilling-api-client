@@ -898,7 +898,7 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
-        label: { type: string }
+        display_name: { type: string, readOnly: true, description: "Der anzuzeigende Name: bei einer Firma company_name, bei einer Privatperson salutation + person_name. Ersetzt das entfallene 'label'." }
         customer_type: { type: string, enum: [business, consumer] }
         company_name: { type: string }
         attention: { type: string }
@@ -975,7 +975,6 @@ components:
         payment_methods:
           type: array
           items: { type: string, enum: [online, transfer, cash] }
-        label: { type: string }
         customer_type: { type: string, enum: [business, consumer], default: business }
         company_name: { type: string }
         attention: { type: string }
