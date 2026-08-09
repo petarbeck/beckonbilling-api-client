@@ -13,8 +13,7 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $company_name
  * @property-read string|null $attention
  * @property-read string|null $salutation
- * @property-read string|null $first_name
- * @property-read string|null $last_name
+ * @property-read string|null $person_name
  * @property-read string|null $customer_info    Composed address block printed on documents.
  * @property-read array|null  $recipient        Structured recipient object.
  * @property-read string|null $billing_email_address

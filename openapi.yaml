@@ -860,8 +860,7 @@ components:
         company_name: { type: string }
         attention: { type: string }
         salutation: { type: string }
-        first_name: { type: string }
-        last_name: { type: string }
+        person_name: { type: string, description: "Full name of a consumer (private person), as ONE field. Replaced first_name/last_name in 0.7.0." }
         address: { type: string }
         zip: { type: string }
         city: { type: string }
@@ -904,8 +903,10 @@ components:
         company_name: { type: string }
         attention: { type: string }
         salutation: { type: string }
-        first_name: { type: string }
-        last_name: { type: string }
+        person_name: { type: string, description: "Full name of a consumer (private person), as ONE field. Replaced first_name/last_name in 0.7.0." }
+        homepage: { type: string, description: "Website of this customer, stored without the scheme (e.g. `www.example.at`)." }
+        imprint_url: { type: string, description: "Imprint URL. Informational only - never printed on a document." }
+        privacy_url: { type: string, description: "Privacy policy URL. Informational only." }
         recipient_email: { type: string, description: Where this customer's documents are sent. }
         recipient_email_name: { type: string }
         cc_email: { type: string }
@@ -979,8 +980,10 @@ components:
         company_name: { type: string }
         attention: { type: string }
         salutation: { type: string }
-        first_name: { type: string }
-        last_name: { type: string }
+        person_name: { type: string, description: "Full name of a consumer (private person), as ONE field. Replaced first_name/last_name in 0.7.0." }
+        homepage: { type: string, description: "Website of this customer, stored without the scheme (e.g. `www.example.at`)." }
+        imprint_url: { type: string, description: "Imprint URL. Informational only - never printed on a document." }
+        privacy_url: { type: string, description: "Privacy policy URL. Informational only." }
         recipient_email: { type: string }
         recipient_email_name: { type: string }
         cc_email: { type: string }

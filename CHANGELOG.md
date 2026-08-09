@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-08-09
+
+### Removed (BREAKING)
+- **`first_name` and `last_name` are gone from `Customer`, replaced by
+  `person_name`.** Splitting a private person's name into two fields bought
+  nothing: what a document prints has always been ONE line, and many names do
+  not divide cleanly ("Anna Maria von Berger"). A consumer customer now carries
+  the whole name in `person_name`; `company_name` remains the printed recipient
+  line and is composed from `salutation` + `person_name`.
+  Migrate by sending `person_name` where you sent the two fields. Documents
+  ISSUED before the change are untouched - their frozen recipient snapshot still
+  carries the old pair and is merged on read, so an old invoice renders exactly
+  as it did.
+
+### Added
+- `Customer.homepage`, `Customer.imprint_url` and `Customer.privacy_url` -
+  informational addresses on the record. They never appear on a document; an
+  organisation's own legal links live elsewhere. Stored without the scheme, so
+  `https://example.at` comes back as `example.at`.
+
 ## [0.6.6] - 2026-08-04
 
 ### Changed
