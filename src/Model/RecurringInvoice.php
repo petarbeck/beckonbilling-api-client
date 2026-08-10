@@ -23,6 +23,14 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $tax_label
  * @property-read string|null $terms_text      Payment terms copied onto every generated invoice.
  * @property-read array|null  $positions
+ * @property-read string|null $last_run_at     ISO datetime. The last time the portal's agent actually ATTEMPTED to run this
+ *                                              template (generate + send) - never set on a run that was skipped because the
+ *                                              current period was already generated. Null before the first attempt.
+ * @property-read string|null $last_run_error  The failure message of the last attempted run, '' when it succeeded (or none
+ *                                              has been attempted yet). Cleared by the NEXT successful run, so a non-empty
+ *                                              value always means "still needs attention" - poll this to detect a template
+ *                                              the daily agent could not bill, e.g. because the organisation has no SMTP
+ *                                              configured.
  */
 final class RecurringInvoice extends Entity
 {

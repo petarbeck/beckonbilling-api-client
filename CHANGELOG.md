@@ -41,6 +41,16 @@ to [Semantic Versioning](https://semver.org/).
   neither appears on any `*Input` schema. On `RecurringInvoice` the field
   describes who created the TEMPLATE - the invoices the daily agent generates
   from it are always system-created, regardless of who owns the template.
+- **`RecurringInvoice.last_run_at` + `RecurringInvoice.last_run_error`**
+  (read-only). A failed automated run used to exist only in the portal's own
+  log, indistinguishable from "never ran" to anyone reading through this
+  client. `last_run_at` is the last time the daily agent actually ATTEMPTED
+  this template (generate + send) - never set on a run skipped because the
+  period was already generated. `last_run_error` is that attempt's failure
+  message, empty when it succeeded; it is CLEARED by the next successful run,
+  so a non-empty value always means "still needs attention" right now. Poll
+  it to detect a template the agent could not bill (e.g. the organisation has
+  no SMTP configured) without watching the portal itself.
 
 ### Fixed
 - **`ArticleVariant.supply_type` / `billing_mode` / `recurring_interval`** wrote
