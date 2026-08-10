@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace BeckonBilling\ApiClient\Tests\Unit;
 
 use BeckonBilling\ApiClient\Collection;
+use BeckonBilling\ApiClient\Model\ArticleVariant;
 use BeckonBilling\ApiClient\Model\Customer;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
 use BeckonBilling\ApiClient\Model\Quote;
@@ -122,5 +123,41 @@ final class ResourceTest extends ClientTestCase
         $this->assertTrue($invoice->isCreditNote());
         $this->assertSame('POST', $http->lastRequest()->getMethod());
         $this->assertStringContainsString('/outbound-invoices/inv1/cancel', (string) $http->lastRequest()->getUri());
+    }
+
+    public function testArticleVariantsAreASubCollection(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(200, [
+                'data' => [
+                    ['id' => 'v1', 'label' => 'Premium', 'price' => 250.0, 'tax_percent' => null],
+                    ['id' => 'v2', 'label' => 'Basis', 'price' => null, 'tax_percent' => null],
+                ],
+                'total' => 2, 'limit' => 100, 'offset' => 0,
+            ])
+            ->push(201, ['id' => 'v3', 'label' => 'Klein', 'price' => 0.0])
+            ->push(200, ['id' => 'v1', 'label' => 'Premium', 'price' => null]);
+
+        $client = $this->makeClient($http);
+
+        $page = $client->articles->variants('a1');
+        $this->assertCount(2, $page);
+        $this->assertContainsOnlyInstancesOf(ArticleVariant::class, iterator_to_array($page));
+        $this->assertStringEndsWith('/articles/a1/variants', explode('?', (string) $http->requests[0]->getUri())[0]);
+        // The whole point of the model: an inherited field stays null and a 0
+        // override stays 0. Neither may be folded into the other.
+        $this->assertNull(iterator_to_array($page)[1]->price);
+
+        $created = $client->articles->createVariant('a1', ['label' => 'Klein', 'price' => 0.0]);
+        $this->assertSame('POST', $http->requests[1]->getMethod());
+        // JSON gives a whole 0.0 back as an int, so compare loosely - what is
+        // under test is that it is a VALUE and not null.
+        $this->assertNotNull($created->price);
+        $this->assertEquals(0.0, $created->price);
+
+        $client->articles->updateVariant('a1', 'v1', ['price' => null]);
+        $this->assertSame('PUT', $http->requests[2]->getMethod());
+        $this->assertStringEndsWith('/articles/a1/variants/v1', explode('?', (string) $http->requests[2]->getUri())[0]);
+        $this->assertSame(['price' => null], $this->bodyOf($http->requests[2]));
     }
 }

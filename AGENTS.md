@@ -145,6 +145,34 @@ a second request to relate them: the credit note carries
 direction lives on the credit note, never on the invoice it reversed - on a
 credit note, `open` means *you* owe the customer a refund.
 
+### Article variants (`$client->articles`)
+
+A variant is a named set of OVERRIDES on a catalog article - "Premium",
+"Klein", "Kleinunternehmer". It is a sub-collection, not an entity of its own,
+because it has no meaning away from its article.
+
+```php
+->variants(string $articleId, array $query = [], array $options = []): Collection<ArticleVariant>
+->createVariant(string $articleId, array $data, array $options = []): ArticleVariant
+->updateVariant(string $articleId, string $variantId, array $data, array $options = []): ArticleVariant
+```
+
+**Every override field is genuinely nullable, and the three states are
+different**: absent = leave as it is, `null` = clear the override and inherit
+the article's value again, a value = a real override. `0` is a value - a price
+of 0 or a tax rate of 0 is an override to zero, not "unset". So read them as
+`$variant->price ?? $article->price`, never `$variant->price ?: $article->price`
+- the second turns a 0 % Kleinunternehmer variant into the article's 20 %.
+
+`label` is required and is never inherited. There is no delete: a variant a
+document already used is retired in the portal, and the document keeps the
+values and the label it snapshotted either way. `Article.variant_count` tells
+you whether an article has any without a second request.
+
+A document line names one with `article_variant_id`; the resolved values plus
+`variant_label` are then snapshotted onto the line, so deleting or renaming the
+variant later never changes what a document says was sold.
+
 ### List filters
 
 - `outboundInvoices->list()` filters: `status` (draft|issued), `paid` (0|1),
@@ -291,6 +319,14 @@ $client->recurringInvoices->create([
   not 0**, since 0 is a real value.
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
+- **`supply_type`** on a position (`service` | `goods`, empty behaves as
+  `service`) decides which sentence a cross-border document prints: within the
+  EU a service line carries the reverse-charge note and a goods line the
+  intra-community-supply note; outside it, "not taxable at the recipient's
+  place" against an export delivery. A mixed document prints both.
+- A position may name a catalog **variant** with `article_variant_id`; the
+  server then takes that variant's resolved values and snapshots its name into
+  `variant_label`. Send the id and leave the label empty.
 - Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the
   form printed once the quantity leaves 1, e.g. `Monate`). Send `unit` and leave
   `unit_plural` empty - the server resolves it from the organisation's unit
@@ -321,5 +357,6 @@ $client->recurringInvoices->create([
 - `setPaid($id, false)` 409s while transaction-linked payments exist.
 - Recurring invoices have **no generate endpoint** - the portal's daily agent
   creates invoices from them.
-- Only these six entities are on `/api/v1`; suppliers, projects, inbound
-  invoices, banking, etc. are portal-internal and not reachable with a token.
+- Only these six entities are on `/api/v1` (plus article variants, as a
+  sub-collection of an article); suppliers, projects, inbound invoices,
+  banking, etc. are portal-internal and not reachable with a token.

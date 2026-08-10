@@ -6,6 +6,32 @@ to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Article variants** - `GET`/`POST /articles/{id}/variants` and
+  `PUT /articles/{id}/variants/{variantId}`, with the `ArticleVariant` model and
+  `$client->articles->variants()/createVariant()/updateVariant()`. A variant is
+  a named set of OVERRIDES on a catalog article ("Premium", "Klein",
+  "Kleinunternehmer"); a field it does not set is inherited, so a variant that
+  overrides nothing produces exactly what the plain article produces. It is a
+  sub-collection rather than an entity of its own because it has no meaning away
+  from its article - and there is deliberately no DELETE.
+
+  **Three states, and they are different:** absent = leave as it is, `null` =
+  clear the override and inherit again, a value = a real override. `0` is a
+  value. Read `$variant->price ?? $article->price`, never
+  `$variant->price ?: $article->price`.
+- **`Article.variant_count`** (read-only) - how many live variants an article
+  has, so a catalog listing does not need a request per article.
+- **`Position.article_variant_id` + `Position.variant_label`** - a document line
+  may be priced from a variant. The resolved values and the variant's NAME are
+  snapshotted onto the line, so deleting or renaming the variant later never
+  changes what a document says was sold. Send the id and leave the label empty;
+  the server resolves it.
+- **`Position.supply_type`** (`service` | `goods`, empty behaves as `service`) -
+  documented now, having been accepted and returned since the reverse-charge
+  round. It decides which sentence a cross-border document prints: within the EU
+  a service line carries the reverse-charge note and a goods line the
+  intra-community-supply note; outside it, "not taxable at the recipient's
+  place" against an export delivery.
 - **`created_by` + `created_by_name`** on `Customer`, `Article`, `Quote`,
   `OutboundInvoice` and `RecurringInvoice`. `created_by` is the creating
   user's uuid, or `null` when the record has no recorded creator - a legacy

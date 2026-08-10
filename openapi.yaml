@@ -355,6 +355,72 @@ paths:
       responses:
         "200": { description: Deleted. }
 
+  /articles/{id}/variants:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Articles]
+      summary: List an article's variants
+      description: >-
+        The variants of one article. A variant only has meaning together with
+        its article, which is why it is a sub-collection rather than an entity
+        of its own. Needs the `articles` feature at view.
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of variants.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleVariantList" }
+    post:
+      tags: [Articles]
+      summary: Create a variant of this article
+      description: Needs the `articles` feature at full.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticleVariantInput" }
+      responses:
+        "201":
+          description: The created variant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleVariant" }
+
+  /articles/{id}/variants/{variantId}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - name: variantId
+        in: path
+        required: true
+        schema: { type: string }
+        description: The variant uuid. It must belong to the article in the path.
+      - $ref: "#/components/parameters/organisation"
+    put:
+      tags: [Articles]
+      summary: Update a variant (partial)
+      description: >-
+        Needs the `articles` feature at full. Pass `null` for a field to clear
+        the override and inherit the article's value again. There is
+        deliberately no DELETE: a variant a document already used is retired in
+        the portal, and the document keeps the values and the label it
+        snapshotted either way.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ArticleVariantInput" }
+      responses:
+        "200":
+          description: The updated variant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ArticleVariant" }
+
   /quotes:
     get:
       tags: [Quotes]
@@ -807,6 +873,30 @@ components:
         price: { type: number, description: Net unit price. }
         tax_percent: { type: number, description: Percentage, e.g. 20. }
         article_id: { type: string, nullable: true, description: Source catalog article UUID (0/absent for free text). }
+        article_variant_id:
+          type: string
+          nullable: true
+          description: >-
+            Variant of that article this line was priced from, or absent for a
+            plain article line. A variant is a named set of OVERRIDES on the
+            article (see `GET /articles/{id}/variants`); picking one takes its
+            values instead of the article's own.
+        variant_label:
+          type: string
+          description: >-
+            The variant's name at the moment the line was written, SNAPSHOTTED
+            like the price. Deleting or renaming the variant later never changes
+            what a document says was sold. Resolved server-side - name
+            `article_variant_id` and leave this empty to have it filled in.
+        supply_type:
+          type: string
+          enum: ["", service, goods]
+          description: >-
+            Whether this line is a service or goods. It decides which sentence a
+            cross-border document prints: within the EU a service line carries
+            the reverse-charge note and a goods line the intra-community supply
+            note; outside it, "not taxable at the recipient's place" against an
+            export delivery. Empty behaves as `service`.
         fibu_code: { type: string, nullable: true }
         discount_type: { type: string, enum: [none, percent, amount], default: none }
         discount_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
@@ -1082,6 +1172,12 @@ components:
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
+        variant_count:
+          type: integer
+          readOnly: true
+          description: >-
+            How many live variants this article has. 0 means the article is used
+            as it stands. Read `GET /articles/{id}/variants` for them.
 
     ArticleInput:
       type: object
@@ -1103,6 +1199,63 @@ components:
             data:
               type: array
               items: { $ref: "#/components/schemas/Article" }
+
+    ArticleVariant:
+      type: object
+      additionalProperties: true
+      description: >-
+        A named set of OVERRIDES on a catalog article - "Premium", "Klein",
+        "Kleinunternehmer". Every override field is genuinely nullable: null
+        means the article's own value is inherited, and a value - INCLUDING 0 -
+        is a real override. A variant that overrides nothing produces exactly
+        what the plain article produces.
+      properties:
+        id: { type: string }
+        article_id: { type: string, readOnly: true, description: The article this variant belongs to. Immutable. }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
+        label: { type: string, description: What this variant is called. Required, never inherited. }
+        sort_order: { type: integer }
+        title: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        price: { type: number, nullable: true, description: "Net unit price. 0 is a real price; null means inherit." }
+        tax_percent: { type: number, nullable: true, description: "Percentage, e.g. 20. 0 is a real rate; null means inherit." }
+        unit: { type: string, nullable: true }
+        fibu_code: { type: string, nullable: true }
+        supply_type: { type: string, nullable: true, enum: [null, service, goods] }
+        billing_mode: { type: string, nullable: true, enum: [null, one_time, recurring] }
+        recurring_interval: { type: string, nullable: true, enum: [null, monthly, quarterly, yearly] }
+        commission_eligible: { type: boolean, nullable: true }
+
+    ArticleVariantInput:
+      type: object
+      additionalProperties: true
+      description: >-
+        Send only what this variant should OVERRIDE. An omitted field stays
+        inherited; an explicit `null` CLEARS an override back to inherited.
+      properties:
+        label: { type: string }
+        sort_order: { type: integer }
+        title: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        price: { type: number, nullable: true }
+        tax_percent: { type: number, nullable: true }
+        unit: { type: string, nullable: true }
+        fibu_code: { type: string, nullable: true }
+        supply_type: { type: string, nullable: true }
+        billing_mode: { type: string, nullable: true }
+        recurring_interval: { type: string, nullable: true }
+        commission_eligible: { type: boolean, nullable: true }
+      required: [label]
+
+    ArticleVariantList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ArticleVariant" }
 
     Quote:
       type: object
