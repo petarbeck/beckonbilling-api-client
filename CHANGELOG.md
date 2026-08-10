@@ -42,6 +42,16 @@ to [Semantic Versioning](https://semver.org/).
   describes who created the TEMPLATE - the invoices the daily agent generates
   from it are always system-created, regardless of who owns the template.
 
+### Fixed
+- **`ArticleVariant.supply_type` / `billing_mode` / `recurring_interval`** wrote
+  their nullability twice, in a way that cancelled itself out: `type: string`
+  beside an `enum` listing `null`. This document declares OpenAPI 3.1, where a
+  `string` type excludes null, so a strict reader made exactly the branch that
+  carries the meaning - `null` clears the override - unreachable. They now say
+  it the way every other nullable field here does: `nullable: true`, with the
+  enum naming only the real values. Documentation only; the API always accepted
+  and returned null on these fields.
+
 ### Removed (BREAKING)
 - **`Customer.label` ist entfallen**, ersetzt durch das schreibgeschuetzte
   **`display_name`**. Die "Bezeichnung" stand als zweiter Name neben dem

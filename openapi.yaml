@@ -1222,9 +1222,15 @@ components:
         tax_percent: { type: number, nullable: true, description: "Percentage, e.g. 20. 0 is a real rate; null means inherit." }
         unit: { type: string, nullable: true }
         fibu_code: { type: string, nullable: true }
-        supply_type: { type: string, nullable: true, enum: [null, service, goods] }
-        billing_mode: { type: string, nullable: true, enum: [null, one_time, recurring] }
-        recurring_interval: { type: string, nullable: true, enum: [null, monthly, quarterly, yearly] }
+        # Nullability is `nullable: true`, the way every other nullable field in
+        # this file expresses it - NOT a `null` member in the enum. Listing null
+        # there while `type` says `string` names a value the type forbids, so a
+        # strict reader makes exactly the branch that carries the meaning
+        # ("clear this override") unreachable. The enum names the real values;
+        # the keyword beside it says the value may be absent.
+        supply_type: { type: string, nullable: true, enum: [service, goods] }
+        billing_mode: { type: string, nullable: true, enum: [one_time, recurring] }
+        recurring_interval: { type: string, nullable: true, enum: [monthly, quarterly, yearly] }
         commission_eligible: { type: boolean, nullable: true }
 
     ArticleVariantInput:
