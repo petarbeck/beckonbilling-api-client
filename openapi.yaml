@@ -898,6 +898,8 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated (e.g. an automated import)." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         display_name: { type: string, readOnly: true, description: "Der anzuzeigende Name: bei einer Firma company_name, bei einer Privatperson salutation + person_name. Ersetzt das entfallene 'label'." }
         customer_type: { type: string, enum: [business, consumer] }
         company_name: { type: string }
@@ -1070,6 +1072,8 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         title: { type: string }
         description: { type: string }
         price: { type: number }
@@ -1105,6 +1109,8 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         public_index: { type: string }
         version: { type: integer }
         status: { type: string, enum: [draft, issued, won, lost, converted] }
@@ -1214,6 +1220,8 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated (e.g. a recurring run or a dunning fee invoice)." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         public_index: { type: string }
         status: { type: string, enum: [draft, issued] }
         customer_id: { type: string }
@@ -1379,6 +1387,8 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this TEMPLATE; null = system-generated. Invoices the daily agent generates from it are always system-created (created_by null), regardless of who created the template." }
+        created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         label: { type: string }
         customer_id: { type: string }
         partner_id: { type: string, nullable: true }

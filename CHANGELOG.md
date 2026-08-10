@@ -5,6 +5,17 @@ to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`created_by` + `created_by_name`** on `Customer`, `Article`, `Quote`,
+  `OutboundInvoice` and `RecurringInvoice`. `created_by` is the creating
+  user's uuid, or `null` when the record has no recorded creator - a legacy
+  row from before this field existed, or something a background process
+  produced (a recurring run, an automated import). `created_by_name` mirrors
+  it as a display string, `''` when `created_by` is null. Both are read-only;
+  neither appears on any `*Input` schema. On `RecurringInvoice` the field
+  describes who created the TEMPLATE - the invoices the daily agent generates
+  from it are always system-created, regardless of who owns the template.
+
 ### Removed (BREAKING)
 - **`Customer.label` ist entfallen**, ersetzt durch das schreibgeschuetzte
   **`display_name`**. Die "Bezeichnung" stand als zweiter Name neben dem

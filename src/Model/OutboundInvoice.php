@@ -8,6 +8,8 @@ namespace BeckonBilling\ApiClient\Model;
  * An outbound invoice / Ausgangsrechnung (`/api/v1/outbound-invoices`).
  *
  * @property-read string      $id
+ * @property-read string|null $created_by      Uuid of the user who created this record; null = system-generated (e.g. a recurring run).
+ * @property-read string|null $created_by_name Display name of the creator; '' when created_by is null.
  * @property-read string|null $public_index      Document number (opaque).
  * @property-read string|null $status            "draft" | "issued".
  * @property-read string|null $customer_id

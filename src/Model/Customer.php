@@ -8,6 +8,8 @@ namespace BeckonBilling\ApiClient\Model;
  * A customer (`/api/v1/customers`).
  *
  * @property-read string      $id
+ * @property-read string|null $created_by      Uuid of the user who created this record; null = system-generated (e.g. a recurring run).
+ * @property-read string|null $created_by_name Display name of the creator; '' when created_by is null.
  * @property-read string|null $display_name Angezeigter Name: Firmenname bzw. Anrede + Personenname
  * @property-read string|null $customer_type   "business" | "consumer"
  * @property-read string|null $company_name
