@@ -63,14 +63,16 @@ to [Semantic Versioning](https://semver.org/).
   and returned null on these fields.
 
 ### Removed (BREAKING)
-- **`Customer.label` ist entfallen**, ersetzt durch das schreibgeschuetzte
-  **`display_name`**. Die "Bezeichnung" stand als zweiter Name neben dem
-  Firmennamen und wurde durchgehend mit ihm verwechselt - Beta-Tester haben
-  regelmaessig den falschen der beiden gepflegt. `display_name` ist bei einer
-  Firma `company_name`, bei einer Privatperson `salutation` + `person_name`;
-  sortiert und gesucht wird ebenfalls danach.
-- `CustomerInput.label` ist entfallen. Ein `label` im Rumpf wird ignoriert und
-  unter `?strict=1` mit 400 abgelehnt.
+- **`Customer.label` is gone**, replaced by the read-only **`display_name`**.
+  The label was a second name standing beside the company name, and the two were
+  confused constantly - beta testers regularly maintained the wrong one of the
+  pair. `display_name` is `company_name` for a business and `salutation` +
+  `person_name` for a private person; sorting and searching follow it too.
+- `CustomerInput.label` is gone. A `label` in the body is ignored, and rejected
+  with 400 under `?strict=1`.
+
+Only `Customer` is affected: supplier, partner and lead are not v1 entities, so
+the identical rename on those does not reach this contract.
 
 ### Migration
 ```diff
@@ -80,8 +82,9 @@ to [Semantic Versioning](https://semver.org/).
 -$client->customers()->create([ 'label' => 'ACME', ... ]);
 +$client->customers()->create([ 'company_name' => 'ACME GmbH', ... ]);
 ```
-Wer bisher nur `label` gesetzt hat, setzt jetzt `company_name` (Firma) bzw.
-`salutation` + `person_name` (Privatperson).
+If you only ever set `label`, set `company_name` instead (business) or
+`salutation` + `person_name` (private person). There is no field to write
+`display_name` into - it is composed from those.
 
 ## [0.7.0] - 2026-08-09
 
