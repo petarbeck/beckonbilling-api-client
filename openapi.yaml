@@ -1732,6 +1732,23 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        recipient_kind:
+          type: string
+          enum: [customer, lead, supplier, partner]
+          description: >-
+            Who this quote is addressed to. `customer` is the normal case and
+            covers a freely typed recipient too. `lead` is QUOTE-ONLY - an
+            outbound invoice accepts only customer, supplier and partner, since
+            an invoice always names a customer.
+        recipient_ref_id:
+          type: string
+          nullable: true
+          description: >-
+            Uuid of the record named by `recipient_kind`, or null for a
+            customer-addressed quote. The printed recipient block is a
+            SNAPSHOT taken from that record when it was assigned - editing the
+            lead, supplier or partner afterwards never rewrites an existing
+            quote.
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         public_index: { type: string }
@@ -1824,6 +1841,22 @@ components:
       type: object
       additionalProperties: true
       properties:
+        recipient_kind:
+          type: string
+          enum: [customer, lead, supplier, partner]
+          description: >-
+            Address this quote to something other than a customer. Pass
+            `recipient_ref_id` with it: the recipient block is then snapshotted
+            server-side from that record and `customer_id` is cleared. A kind
+            this document does not accept is REFUSED with 422
+            `recipient_kind_invalid` - it is never silently ignored, which would
+            leave a document with no recipient at all. `lead` is quote-only.
+        recipient_ref_id:
+          type: string
+          description: >-
+            Uuid of the lead, supplier or partner named by `recipient_kind`.
+            Unknown and foreign uuids answer identically with 404
+            `recipient_not_found`.
         document_term_id:
           type: string
           writeOnly: true
@@ -1915,6 +1948,21 @@ components:
       type: object
       additionalProperties: true
       properties:
+        recipient_kind:
+          type: string
+          enum: [customer, supplier, partner]
+          description: >-
+            Who this invoice is addressed to. `customer` is the normal case.
+            Note the quote accepts a fourth kind, `lead`; an invoice never does,
+            since it always names a customer - use `POST /leads/{id}/complete`
+            first. Served since the field existed, documented from 0.11.0.
+        recipient_ref_id:
+          type: string
+          nullable: true
+          description: >-
+            Uuid of the supplier or partner named by `recipient_kind`, or null
+            for a customer-addressed invoice. The printed recipient block is a
+            SNAPSHOT taken when it was assigned.
         payment_mode:
           type: string
           enum: [direct_debit, all, individual]
@@ -2365,10 +2413,6 @@ components:
       type: object
       additionalProperties: true
       properties:
-        payment_mode: { type: string, enum: [direct_debit, all, individual] }
-        payment_methods:
-          type: array
-          items: { type: string, enum: [online, transfer, cash] }
         document_term_id:
           type: string
           writeOnly: true

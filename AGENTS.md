@@ -120,6 +120,26 @@ Resource properties and their models:
 ->pdf(string $id, array $options = []): string             // raw PDF bytes (409 for drafts)
 ```
 
+**A quote can be addressed to something other than a customer.** Pass
+`recipient_kind` (`customer` | `lead` | `supplier` | `partner`) together with
+`recipient_ref_id`; the printed recipient block is snapshotted server-side from
+that record and `customer_id` is cleared. `lead` is QUOTE-ONLY - an outbound
+invoice accepts only `customer`, `supplier` and `partner`, because an invoice
+always names a customer.
+
+Three rules worth knowing before you build on it:
+
+- A kind the document does not accept is **refused** with 422
+  `recipient_kind_invalid`. It is never silently ignored - doing so produced a
+  draft with no recipient at all, which is exactly the failure this refusal
+  exists to prevent.
+- Unknown and foreign `recipient_ref_id` answer identically with 404
+  `recipient_not_found`. Two different answers would be an existence oracle.
+- `POST /quotes/{id}/convert` on a LEAD-addressed quote is refused with 409
+  `quote_recipient_is_lead` unless that lead has already been completed into a
+  customer (`POST /leads/{id}/complete`). The conversion then binds the invoice
+  to that customer and keeps the quote's recipient snapshot.
+
 `send` is the one quote action whose HTTP body is an ENVELOPE (`{sent_to,
 quote}`) rather than a bare quote; `send()` unwraps it for you and
 `sendResult()` hands you the whole thing. A quote with no recipient address and

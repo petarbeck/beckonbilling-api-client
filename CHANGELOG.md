@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-08-11
+
+### Added
+
+- **A quote can be addressed to a LEAD, a supplier or a partner** - not only a
+  customer. `Quote` and `QuoteInput` gain `recipient_kind`
+  (`customer` | `lead` | `supplier` | `partner`) and `recipient_ref_id`. Pass
+  both; the recipient block is snapshotted server-side from that record and
+  `customer_id` is cleared. `lead` is quote-only: an invoice always names a
+  customer.
+- **`POST /quotes/{id}/convert` can now answer 409 `quote_recipient_is_lead`.**
+  A lead-addressed quote converts only once that lead has been completed into a
+  customer (`POST /leads/{id}/complete`); the invoice is then bound to that
+  customer and the quote's recipient snapshot is preserved. If you convert
+  quotes programmatically, handle this alongside the existing refusals.
+
+### Fixed (documentation only - no server change)
+
+- **`OutboundInvoice` now documents `recipient_kind` / `recipient_ref_id`.** The
+  server has returned them since invoices learned supplier and partner
+  recipients; only the output schema was missing them, so a generated client
+  dropped two fields that were on the wire.
+- **`openapi.yaml` parses under a strict YAML parser again.**
+  `RecurringInvoiceInput` carried `payment_mode` and `payment_methods` twice.
+  The two copies were byte-identical, so nothing was ambiguous in practice - but
+  a duplicated mapping key is a hard error for strict parsers and for several
+  code generators, which means the file could not be consumed by them at all.
+
 ## [0.10.0] - 2026-08-11
 
 ### Changed (BREAKING, and it retracts a claim 0.9.0 made an hour earlier)
