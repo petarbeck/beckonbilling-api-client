@@ -13,7 +13,7 @@ Key facts for an assistant:
 - `units` and `documentTerms` are read-only (list/get); writing to them throws `\LogicException`.
 - Actions: quotes `issue/send/sendResult/convert/pdf`; invoices `issue/send/cancel/setPaid/pdf`. Articles also carry variants: `variants/createVariant/updateVariant`.
 - Errors: typed subclasses of `ApiException`; branch on `getErrorKey()`. Capabilities `send`/`bank` gate email/money actions.
-- Traps worth knowing: a position's `unit` must come from `$client->units` (422 `unit_unknown`); `due_days` (not `due_date`) sets an invoice's payment term; `issue()` reports `send_error` and `payment_link_error` on a 200; `cancel()` returns the credit note.
+- Traps worth knowing: a position's `unit` is adopted into the vocabulary if unknown and reads back in the vocabulary's spelling; `due_days` (not `due_date`) sets an invoice's payment term; `issue()` reports `send_error` and `payment_link_error` on a 200; `cancel()` returns the credit note.
 
 ## Docs
 

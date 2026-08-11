@@ -210,7 +210,7 @@ variant later never changes what a document says was sold.
 
 The organisation's unit vocabulary, and **the list the server validates a
 position's `unit` against**: anything outside it is refused with 422
-`unit_unknown`. So this is not a display nicety - read it before writing
+the vocabulary. So this is not a display nicety - read it before writing
 positions and pick a `short` from it.
 
 ```php
@@ -327,7 +327,7 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `PermissionException` | 403 | `missing_permission`, `send_not_permitted`, `bank_not_permitted` |
 | `NotFoundException` | 404 | absent or foreign-organisation |
 | `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked) |
-| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`) |
+| `ValidationException` | 400/422 | rejected payload (`unit_too_long`, `unrecognised_keys`, `article_not_found`) |
 | `RateLimitException` | 429 | back off |
 | `ServerException` | 5xx | retryable |
 | `TransportException` | 0 | network failure; original PSR-18 error is `->getPrevious()` |
@@ -484,7 +484,8 @@ $client->recurringInvoices->create([
   sub-collection of an article); suppliers, projects, inbound invoices,
   banking, etc. are portal-internal and not reachable with a token.
 - **Creating answers 201**, not 200. Everything else answers 200.
-- A free-text `unit` is refused (422 `unit_unknown`) - pick one from
+- A `unit` the organisation does not stock is ADDED to its vocabulary, and what
+  comes back is the vocabulary's spelling (`stk.` reads back as `Stk.`) - pick from
   `$client->units`. See the Units section for the two ways this surprises you.
 - `quotes->send()` answers an envelope on the wire, not a bare quote (the client
   unwraps it); `outboundInvoices->cancel()` answers the CREDIT NOTE, not the

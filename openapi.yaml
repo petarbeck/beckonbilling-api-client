@@ -85,12 +85,18 @@ info:
 
     ## Units are a vocabulary, not free text
 
-    A position's `unit`, and an article's, must be one of the organisation's
-    units (`GET /units`); anything else is refused with **422 `unit_unknown`**.
-    The reason is the printed document: a unit is inflected once the quantity
-    leaves 1 ("12 Monate"), and only a vocabulary entry carries the plural form
-    to inflect to. See `Position.unit` for the escape hatch that keeps existing
-    records saveable.
+    A position's `unit`, and an article's, is matched against the
+    organisation's units (`GET /units`). The reason is the printed document: a
+    unit is inflected once the quantity leaves 1 ("12 Monate"), and only a
+    vocabulary entry carries the plural form to inflect to.
+
+    A unit the organisation does not stock yet is **added to its vocabulary**,
+    not refused - send `unit_plural` alongside if it inflects, or the new entry
+    is created without one and prints unchanged. Matching is trimmed and
+    case-insensitive, and **the stored value is the vocabulary's spelling**, so
+    sending `stk.` against a vocabulary holding `Stk.` reads back as `Stk.`
+    rather than creating a second entry. The only refusal is a value too long to
+    be a unit at all (over 32 characters, **422 `unit_too_long`**).
   license:
     name: MIT
     url: https://github.com/petarbeck/beckonbilling-api-client/blob/main/LICENSE
@@ -478,9 +484,10 @@ paths:
       tags: [Units]
       summary: List the organisation's unit vocabulary
       description: >-
-        The short forms a position's `unit` (and an article's) may use. Anything
-        outside this list is refused with 422 `unit_unknown`, so read it before
-        writing positions.
+        The short forms a position's `unit` (and an article's) resolves
+        against. A value outside this list is ADDED to it rather than refused,
+        so reading it first is how you avoid growing the vocabulary by accident
+        - and how you learn the spelling the server will store.
 
 
         Readable with View on ANY ONE of `articles`, `quotes`,
@@ -1137,23 +1144,23 @@ components:
         unit:
           type: string
           description: >-
-            Short unit printed after the quantity, e.g. "h", "Stk.". **Must be
-            one of the organisation's units** (`GET /units`) - anything else is
-            refused with 422 `unit_unknown`, because only a vocabulary entry
-            carries the plural form the document inflects to.
+            Short unit printed after the quantity, e.g. "h", "Stk.". Resolved
+            against the organisation's units (`GET /units`), because only a
+            vocabulary entry carries the plural form the document inflects to.
 
 
-            Two escape hatches, so the rule never blocks an edit that has
-            nothing to do with it. A unit ALREADY STORED on the record you are
-            saving always keeps passing, even after it is retired from the
-            vocabulary - otherwise deleting a unit would make every document
-            that ever used it unsaveable. And a unit INHERITED rather than
-            named passes too: omitting `unit` falls back to the named article's
-            unit and then to the organisation's default, and that value is
-            accepted even when it is itself off-vocabulary, because an article
-            grandfathered that way has to stay sellable. Only a unit the caller
-            genuinely invents is refused. Empty is always fine; a line without a
-            unit is normal.
+            A unit the organisation does not stock yet is ADDED to its
+            vocabulary rather than refused, carrying whatever `unit_plural` you
+            sent with it (without one it is created as a unit that does not
+            inflect, and prints unchanged). **Read back what you get**: matching
+            is trimmed and case-insensitive, and the value stored is the
+            VOCABULARY'S spelling, so `stk.` against a vocabulary holding `Stk.`
+            comes back as `Stk.` instead of becoming a second entry for the same
+            unit. Omitting it is normal - the value then falls back to the named
+            article's unit and then to the organisation's default. The only
+            refusal is a value that cannot be a unit at all: over 32 characters
+            answers **422 `unit_too_long`**, because storing it would truncate
+            silently.
         unit_plural:
           type: string
           description: >-
@@ -1582,9 +1589,10 @@ components:
           type: string
           description: >-
             Default short unit for lines created from this article, e.g. "h",
-            "Stk.". Must be one of the organisation's units (`GET /units`), or
-            the write is refused with 422 `unit_unknown`; the article's own
-            currently-stored unit always keeps passing.
+            "Stk.". Resolved against the organisation's units (`GET /units`); a
+            value it does not stock yet is added to the vocabulary rather than
+            refused, and what comes back is the vocabulary's spelling. Over 32
+            characters answers 422 `unit_too_long`.
         article_group_id: { type: string }
         group_label:
           type: string
@@ -1636,8 +1644,10 @@ components:
         unit:
           type: string
           description: >-
-            Must be one of the organisation's units (`GET /units`); anything else
-            is 422 `unit_unknown`.
+            Resolved against the organisation's units (`GET /units`); a value
+            it does not stock yet is added to the vocabulary rather than
+            refused. What comes back is the vocabulary's spelling. Over 32
+            characters answers 422 `unit_too_long`.
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }

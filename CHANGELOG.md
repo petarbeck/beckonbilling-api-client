@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-08-11
+
+### Changed (BREAKING, and it retracts a claim 0.9.0 made an hour earlier)
+
+- **An unknown `unit` is ADOPTED into the organisation's vocabulary, not
+  refused.** 0.9.0 announced a 422 `unit_unknown` and told you your writes would
+  start failing. That refusal never reached a deployed server: the portal
+  reversed it before release, on the reasoning that it made a caller who knows a
+  unit we happen not to stock unable to bill for it. **If you changed anything
+  because of 0.9.0's note, you can change it back.**
+
+  What actually happens now, and the part worth reading: a `unit` outside the
+  vocabulary creates an entry (short form and label are the value you sent, the
+  plural comes from a `unit_plural` sent alongside and is otherwise empty,
+  meaning it does not inflect). Matching is trimmed and case-insensitive, and
+  **the value stored is the vocabulary's spelling** - send `stk.` against a
+  vocabulary holding `Stk.` and you read back `Stk.`, rather than creating a
+  second entry for one unit. So the field is no longer something you can send
+  and forget; read back what the server stored.
+
+  `unit_unknown` no longer exists. The one refusal left is **422
+  `unit_too_long`**, over 32 characters, because storing it would truncate
+  silently.
+
+  `GET /units` matters MORE under this rule, not less: it is now the way to
+  avoid growing someone's vocabulary by accident, and the way to learn the
+  spelling that will come back.
+
+### Note
+
+- 0.9.0's other headline, `due_days` becoming load-bearing, is unaffected and
+  still applies exactly as described there.
+
 ## [0.9.0] - 2026-08-11
 
 ### Changed (BREAKING)

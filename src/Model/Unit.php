@@ -9,7 +9,8 @@ namespace BeckonBilling\ApiClient\Model;
  *
  * Read-only on this API. It exists because the server VALIDATES a position's
  * `unit` against this list: a short form that is not in it is refused with 422
- * `unit_unknown`. So this is the list to pick from, not a display nicety.
+ * the vocabulary. So this is the list to pick from, not a display nicety -
+ * a value outside it is adopted, which grows the vocabulary by accident.
  *
  * The reason a unit is managed vocabulary rather than free text is `plural`.
  * A document prints the unit inflected - "12 Monate", not "12 Monat" - and a
