@@ -9,10 +9,15 @@ to [Semantic Versioning](https://semver.org/).
 
 - **`due_days` on an outbound invoice now does something.** It has been an
   accepted input all along and was **read only to switch the terms branch off,
-  then never applied** - so neither it, nor the day count of a
-  `document_term_id`, nor a customer's `invoice_due_days` ever moved
-  `due_date`. It applies from portal **v1.4.x**, and an explicit `due_days`
-  beats a preset's days sent in the same request.
+  then never applied**. Precisely: a request carrying `due_days` moved nothing -
+  not the key itself, and not the day count of a `document_term_id` sent beside
+  it, because the key's mere PRESENCE disabled that branch. A request WITHOUT
+  `due_days` was unaffected, so a preset alone always worked. It applies from
+  portal **v1.4.x**, and an explicit `due_days` beats a preset's days sent in
+  the same request.
+
+  (An organisation's or customer's default preset is seeded at draft creation,
+  before this runs, and was never affected either way.)
 
   If you have been sending `due_days` as a harmless no-op, **your invoices'
   due dates will now move.** Check what you send before upgrading the portal.

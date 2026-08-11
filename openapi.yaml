@@ -2129,11 +2129,14 @@ components:
             the day count of a `document_term_id` in the same request.
 
 
-            **This key was accepted and silently ignored until portal v1.3.139.**
+            **This key was accepted and silently ignored until portal v1.4.x.**
             It was read only to switch the terms branch off and then never
-            applied, so neither it nor a preset's days moved the due date. A
-            client that has been sending it as a no-op will now find the due date
-            moving. `due_date` itself is NOT an input - it is read-only.
+            applied, so a request CARRYING it moved nothing - neither the key
+            itself nor the days of a `document_term_id` sent beside it, because
+            its mere presence disabled that branch. A request without it was
+            unaffected, so a preset alone always worked. A client that has been
+            sending it as a no-op will now find the due date moving.
+            `due_date` itself is NOT an input - it is read-only.
         customer_id:
           type: string
           description: >-

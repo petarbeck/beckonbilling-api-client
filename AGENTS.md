@@ -401,7 +401,9 @@ $client->recurringInvoices->create([
   itself is read-only and has never been an input. It reads back derived
   (`due_date - issue_date`, null while either is unset). `0` is a real value
   meaning due immediately. **It was accepted and silently ignored until portal
-  v1.3.139**, so if you have been sending it as a no-op, it now takes effect.
+  v1.4.x** - and worse, its mere presence disabled the preset branch too, so a
+  request carrying it moved nothing at all. If you have been sending it as a
+  no-op, it now takes effect.
   An explicit `due_days` beats the day count of a `document_term_id` sent in the
   same request.
 - `RecurringInvoice.last_run_error` comes with **`last_run_severity`**
