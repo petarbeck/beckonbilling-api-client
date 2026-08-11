@@ -18,6 +18,16 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read array|null  $positions
  * @property-read string|null $issue_date        ISO YYYY-MM-DD.
  * @property-read string|null $due_date          ISO YYYY-MM-DD.
+ * @property-read int|null    $due_days          Payment term in calendar days, DERIVED as due_date - issue_date.
+ *                                               Null while either date is unset. Writable as an input.
+ * @property-read string|null $project_id
+ * @property-read string|null $payment_mode      "direct_debit" | "all" | "individual".
+ * @property-read array|null  $payment_methods   Selection used when payment_mode is "individual".
+ * @property-read array|null  $payment_methods_effective  The RESOLVED ways to pay this document: empty for
+ *                                               direct debit (we collect), the organisation's defaults for
+ *                                               "all", the document's own clipped selection for "individual".
+ * @property-read string|null $payment_method    LEGACY, frozen at BANK_TRANSFER on every row. Never render it.
+ * @property-read string|null $document_send_mode "link" | "attach". A document always carries a concrete value.
  * @property-read bool|null   $paid              Derived from payment records.
  * @property-read float|null  $paid_amount
  * @property-read string|null $paid_at           ISO datetime; null until fully paid.
@@ -40,8 +50,11 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total
  * @property-read float|null  $gross_total
- * @property-read string|null $partner_id
- * @property-read string|null $send_error        Present if issue/send mailing failed.
+ * @property-read string|null $partner_id        Commission partner. Commission follows THIS, not the customer.
+ * @property-read string|null $send_error        Present only if issue/send mailing failed. Issuing still succeeded.
+ * @property-read string|null $payment_link_error Present only if minting the Stripe payment link failed. Issuing
+ *                                               still succeeded, but the document offers online payment with no
+ *                                               link behind it - surface this rather than swallowing it.
  */
 final class OutboundInvoice extends Entity
 {

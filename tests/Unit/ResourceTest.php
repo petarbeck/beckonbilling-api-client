@@ -7,8 +7,10 @@ namespace BeckonBilling\ApiClient\Tests\Unit;
 use BeckonBilling\ApiClient\Collection;
 use BeckonBilling\ApiClient\Model\ArticleVariant;
 use BeckonBilling\ApiClient\Model\Customer;
+use BeckonBilling\ApiClient\Model\DocumentTerm;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
 use BeckonBilling\ApiClient\Model\Quote;
+use BeckonBilling\ApiClient\Model\Unit;
 use BeckonBilling\ApiClient\Tests\Support\ClientTestCase;
 use BeckonBilling\ApiClient\Tests\Support\MockHttpClient;
 
@@ -81,8 +83,9 @@ final class ResourceTest extends ClientTestCase
     {
         $http = (new MockHttpClient())
             ->push(200, ['id' => 'q1', 'status' => 'issued'])
-            ->push(200, ['id' => 'q1', 'status' => 'issued'])
-            ->push(200, ['invoice_id' => 'inv9', 'quote' => ['id' => 'q1', 'status' => 'converted']])
+            // The send response is an ENVELOPE, which is what the API really sends.
+            ->push(200, ['sent_to' => 'kunde@example.com', 'quote' => ['id' => 'q1', 'status' => 'issued']])
+            ->push(201, ['outbound_invoice_id' => 'inv9', 'quote' => ['id' => 'q1', 'status' => 'converted']])
             ->push(200, '%PDF-quote', ['Content-Type' => 'application/pdf']);
 
         $client = $this->makeClient($http);
@@ -96,11 +99,138 @@ final class ResourceTest extends ClientTestCase
         $this->assertSame(['document_ids' => ['d1']], $this->bodyOf($http->requests[1]));
 
         $result = $client->quotes->convert('q1');
-        $this->assertSame('inv9', $result['invoice_id']);
+        $this->assertSame('inv9', $result['outbound_invoice_id']);
         $this->assertInstanceOf(Quote::class, $result['quote']);
 
         $pdf = $client->quotes->pdf('q1');
         $this->assertSame('%PDF-quote', $pdf);
+    }
+
+    /**
+     * The API answers `outbound_invoice_id`; this method read `invoice_id`, a
+     * key it has never sent, so a successful conversion handed back null. The
+     * old key is kept as an alias, now carrying the real value.
+     */
+    public function testConvertReadsTheKeyTheApiActuallySends(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(201, ['outbound_invoice_id' => 'inv9', 'quote' => ['id' => 'q1']]);
+
+        $result = $this->makeClient($http)->quotes->convert('q1');
+
+        $this->assertSame('inv9', $result['outbound_invoice_id']);
+        $this->assertSame('inv9', $result['invoice_id'], 'the deprecated alias must carry the real id');
+    }
+
+    /**
+     * Quote send is the one action whose body is an envelope, not a bare quote.
+     * Hydrating the envelope as the Quote made every field null and buried the
+     * real one at ->quote.
+     */
+    public function testQuoteSendUnwrapsTheEnvelope(): void
+    {
+        $http = (new MockHttpClient())->push(200, [
+            'sent_to' => 'kunde@example.com',
+            'quote' => ['id' => 'q1', 'public_index' => '2608-1000', 'status' => 'issued'],
+            'detached_positions' => [['position' => 2, 'title' => 'Altes Produkt']],
+        ]);
+
+        $client = $this->makeClient($http);
+        $quote = $client->quotes->send('q1');
+
+        $this->assertSame('q1', $quote->id());
+        $this->assertSame('2608-1000', $quote->public_index);
+
+        $http2 = (new MockHttpClient())->push(200, [
+            'sent_to' => 'kunde@example.com',
+            'quote' => ['id' => 'q1'],
+            'detached_positions' => [['position' => 2, 'title' => 'Altes Produkt']],
+        ]);
+        $full = $this->makeClient($http2)->quotes->sendResult('q1');
+
+        $this->assertSame('kunde@example.com', $full['sent_to']);
+        $this->assertInstanceOf(Quote::class, $full['quote']);
+        $this->assertCount(1, $full['detached_positions']);
+    }
+
+    /**
+     * Issuing reports two best-effort failures on a 200 body. A client that
+     * branches on the status code alone never learns about either.
+     */
+    public function testIssueSurfacesBothSoftFailures(): void
+    {
+        $http = (new MockHttpClient())->push(200, [
+            'id' => 'inv1',
+            'status' => 'issued',
+            'send_error' => 'SMTP is not configured.',
+            'payment_link_error' => 'Stripe key rejected.',
+        ]);
+
+        $issued = $this->makeClient($http)->outboundInvoices->issue('inv1');
+
+        $this->assertSame('SMTP is not configured.', $issued->send_error);
+        $this->assertSame('Stripe key rejected.', $issued->payment_link_error);
+    }
+
+    public function testUnitsAndDocumentTermsAreReadable(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(200, [
+                'data' => [
+                    ['id' => 'u1', 'short' => 'h', 'plural' => '', 'label' => 'Stunde'],
+                    ['id' => 'u2', 'short' => 'Monat', 'plural' => 'Monate', 'label' => 'Monat'],
+                ],
+                'total' => 2, 'limit' => 100, 'offset' => 0,
+            ])
+            ->push(200, ['id' => 'u2', 'short' => 'Monat', 'plural' => 'Monate'])
+            ->push(200, [
+                'data' => [['id' => 't1', 'kind' => 'outbound_invoice', 'days' => 0, 'is_default' => true]],
+                'total' => 1, 'limit' => 100, 'offset' => 0,
+            ]);
+
+        $client = $this->makeClient($http);
+
+        $units = $client->units->list();
+        $this->assertContainsOnlyInstancesOf(Unit::class, iterator_to_array($units));
+        $this->assertStringEndsWith('/units', explode('?', (string) $http->requests[0]->getUri())[0]);
+        // An empty plural means "does not inflect", not "missing".
+        $this->assertSame('', iterator_to_array($units)[0]->plural);
+        $this->assertSame('Monate', iterator_to_array($units)[1]->plural);
+
+        $this->assertInstanceOf(Unit::class, $client->units->get('u2'));
+
+        $terms = $client->documentTerms->list(['kind' => 'outbound_invoice']);
+        $this->assertContainsOnlyInstancesOf(DocumentTerm::class, iterator_to_array($terms));
+        $this->assertSame('outbound_invoice', $this->queryOf($http->requests[2])['kind']);
+        // 0 days is a real term ("due immediately"), never "unset".
+        $this->assertSame(0, iterator_to_array($terms)[0]->days);
+    }
+
+    /**
+     * Read-only means it fails HERE, without spending a request on a 405.
+     */
+    public function testReadOnlyResourcesRefuseWrites(): void
+    {
+        $http = new MockHttpClient();
+        $client = $this->makeClient($http);
+
+        foreach ([
+            fn () => $client->units->create(['short' => 'kg']),
+            fn () => $client->units->update('u1', ['short' => 'kg']),
+            fn () => $client->units->delete('u1'),
+            fn () => $client->documentTerms->create(['label' => 'x']),
+            fn () => $client->documentTerms->update('t1', ['label' => 'x']),
+            fn () => $client->documentTerms->delete('t1'),
+        ] as $write) {
+            try {
+                $write();
+                $this->fail('a write on a read-only resource must throw');
+            } catch (\LogicException $e) {
+                $this->assertStringContainsString('read-only', $e->getMessage());
+            }
+        }
+
+        $this->assertSame([], $http->requests, 'no request may leave the client');
     }
 
     public function testInvoiceSetPaidSendsPutWithPaidFlag(): void

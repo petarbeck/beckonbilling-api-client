@@ -3,6 +3,141 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - UNRELEASED
+
+### Changed (BREAKING)
+
+- **`due_days` on an outbound invoice now does something.** It has been an
+  accepted input all along and was **read only to switch the terms branch off,
+  then never applied** - so neither it, nor the day count of a
+  `document_term_id`, nor a customer's `invoice_due_days` ever moved
+  `due_date`. It applies from portal **v1.4.x**, and an explicit `due_days`
+  beats a preset's days sent in the same request.
+
+  If you have been sending `due_days` as a harmless no-op, **your invoices'
+  due dates will now move.** Check what you send before upgrading the portal.
+
+  `due_days` also reads back now, DERIVED as `due_date - issue_date` (null while
+  either is unset). `due_date` itself is **not** an input and never was -
+  `AGENTS.md` said to "omit `due_date` on create to let the preset supply the
+  window", which was never true of a key the API does not read.
+
+- **A unit must come from the organisation's vocabulary.** A position's `unit`,
+  and an article's, is refused with **422 `unit_unknown`** unless it matches one
+  of `GET /units`. Free text used to be accepted, so anything posting a typed
+  unit starts failing. The reason is the printed document: a unit is inflected
+  once the quantity leaves 1 ("12 Monate"), and only a vocabulary entry carries
+  the plural to inflect to.
+
+  Two things that are easy to get wrong, and both are escape hatches rather
+  than traps. A unit **already stored** on the record being saved always keeps
+  passing, even once it is retired from the vocabulary, so deleting a unit never
+  makes an existing document unsaveable. And a unit **inherited** rather than
+  named - omitting it falls back to the catalog article's unit and then to the
+  organisation's default - passes too, even when that inherited value is itself
+  off-vocabulary. Both of those are guarded where they are SET, so an article
+  grandfathered there stays sellable; only a value the caller genuinely invents
+  is refused.
+
+### Added
+
+- **`GET /units` + `$client->units`** (read-only) - the organisation's unit
+  vocabulary: `short`, `plural`, `label`, `display_label`, `position`. This is
+  the list the server validates against, so it is what to pick from rather than
+  a display nicety. Readable with View on any one of `articles`, `quotes`,
+  `outbound_invoices` or `recurring_invoices`: a token allowed to write a
+  document has to be able to read what its documents are checked against.
+- **`GET /document-terms` + `$client->documentTerms`** (read-only) - terms
+  presets: `kind`, `label`, `days`, `text`, `is_default`. Where the ids for the
+  write-only `document_term_id` input come from. Filter with
+  `list(['kind' => 'quote'])`. Rows are filtered to the kinds the token may
+  view, and asking for a kind it may not answers an **empty list**, not 403,
+  which would leak that the other kind exists. `days` of `0` is a real term
+  ("due immediately"), never "unset".
+- **`Resource\ReadOnlyResource`** - `create`/`update`/`delete` on those two
+  throw `\LogicException` locally instead of spending a request on a 405.
+- **`OutboundInvoice.payment_link_error`** - the second best-effort side effect
+  of issuing, beside the already-documented `send_error`. Neither fails the
+  issue, so **both have to be read off a 200 result**; this one means the
+  invoice went out offering online payment with no Stripe link behind it.
+- **`RecurringInvoice.last_run_severity`** (`''` | `warning` | `error`) - 0.8.0
+  documented `last_run_at` and `last_run_error` and missed the third of the
+  trio, which is the one saying whether a non-empty message is a failed run or a
+  run that DID bill and needs a look afterwards.
+- **`Quotes::sendResult()`** - the full send envelope (`sent_to`, `quote`,
+  `detached_positions`).
+- Input keys that were accepted all along and absent from the contract:
+  `terms_text` on all three documents; `service_period_mode`, `reverse_charge`,
+  `payment_mode`, `payment_methods`, `document_send_mode`, `email_text`,
+  `email_body`, `pdf_footer`, `pdf_note`, `project_id` and `reference_fields` on
+  `RecurringInvoiceInput`; `deposit_type`/`deposit_value`, `recipient`,
+  `recipient_email`, `partner_id`, `project_id`, `document_ids`, `email_text`
+  and `reference_fields` on `QuoteInput`; `due_days`, `recipient`, the SEPA
+  payout trio (`recipient_account_holder`/`_iban`/`_bic`),
+  `recipient_kind`/`recipient_ref_id`, `partner_id`, `project_id`,
+  `document_ids`, `service_period`, `tax_label`, `email_text`, `pdf_note`,
+  `payment_qr_code` and `reference_fields` on `OutboundInvoiceInput` - which
+  documented 8 of roughly 30.
+- `ArticleInput` gained `unit`, `supply_type`, `billing_mode`,
+  `recurring_interval`; the `Article` OUTPUT gained the last three plus
+  `group_label`. 0.8.0 crossed these wires - the model file learned
+  `billing_mode`/`recurring_interval` while `openapi.yaml` learned
+  `variant_count`, and each stayed silent about the other's.
+- `Customer` and `CustomerInput` gained the address block (`address`, `zip`,
+  `city`, `country`, `vat_id`, `additional`, `email`), the bank fields, the
+  partner fields, `hourly_rate` and `document_send_mode` - core fields the
+  contract had simply never described.
+- `?strict=1` is documented for the first time, **including the fact that it
+  silently does nothing on `/articles` and `/article-categories`**, which
+  declare no key list. A validation flag that quietly validates nothing on two
+  endpoints is worse unmentioned than mentioned.
+- Documented that **creating answers 201** (six paths said 200), that
+  `Position.unit` carries the `unit_unknown` rule, and that
+  `RecurringInvoice.document_ids` is the one place this API exposes internal
+  integer ids rather than UUIDs.
+
+### Fixed
+
+- **`Quotes::convert()` always returned a null invoice id.** It read
+  `invoice_id`; the API answers **`outbound_invoice_id`**, as `AGENTS.md` itself
+  has said since 0.6.x. The test mocked the wrong key too, so it passed while
+  the method was broken against every real server. It now reads the real key and
+  returns it under BOTH names, so nothing that read `invoice_id` breaks - it
+  simply starts receiving a value.
+- **`Quotes::send()` returned an empty Quote.** That endpoint answers an
+  envelope (`{ sent_to, quote }`), not a bare quote, so hydrating the whole
+  payload as the model left every field null with the real quote buried at
+  `->quote`. It now unwraps it.
+- **`Model\Customer` documented six properties the API has not emitted since the
+  2026-07-03 structured-recipient migration**: `recipient`,
+  `billing_email_address`, `billing_email_name`, `contact_name`,
+  `contact_email`, `contact_phone`. `$customer->contact_email` returned null
+  forever, silently. `openapi.yaml` was corrected in 0.6.3; the model file was
+  missed and shipped rotten through 0.8.0. It now mirrors what the API emits.
+- `Model\Quote` documented `footer_comment`, which is no longer emitted - the
+  field is `pdf_footer`. Same class of rot, found by the same audit.
+- `Model\Article`'s docblock had `tax_percent`'s description appended onto the
+  `unit` line.
+- Every remaining "daily agent" was corrected to **the automation agent, which
+  runs once a day at 08:00 in the ORGANISATION's own timezone**. `DailyAgent` is
+  decommissioned, and the schedule is now per-organisation local time - visible
+  to anyone polling `next_run_at`, which no longer moves on one fixed UTC hour.
+- `AGENTS.md`, `README.md` and `llms.txt` said "six entities"; there are eight.
+- Documented what `cancel()` really answers (the **credit note** it created, not
+  the invoice you cancelled) and the two 409s it can raise.
+
+### Migration
+```diff
+-$id = $client->quotes->convert($quoteId)['invoice_id'];   // was always null
++$id = $client->quotes->convert($quoteId)['outbound_invoice_id'];
+
+-$quote = $client->quotes->send($quoteId);                 // was an empty model
++$quote = $client->quotes->send($quoteId);                 // now the real quote
+
+-'unit' => 'Stunden',                                      // now 422 unit_unknown
++'unit' => $client->units->list()->data[0]->short,
+```
+
 ## [0.8.0] - 2026-08-10
 
 ### Added

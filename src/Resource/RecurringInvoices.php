@@ -9,7 +9,8 @@ use BeckonBilling\ApiClient\Model\RecurringInvoice;
 /**
  * Recurring invoices - `/api/v1/recurring-invoices` (feature: `recurring_invoices`).
  *
- * Generation is automatic (the portal's daily agent); there is no generate
+ * Generation is automatic: the portal's automation agent runs each due template
+ * once a day, at 08:00 in the ORGANISATION's own timezone. There is no generate
  * endpoint in the public API.
  *
  * @method RecurringInvoice get(string $id, array $options = [])

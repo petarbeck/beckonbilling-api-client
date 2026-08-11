@@ -9,9 +9,11 @@ use BeckonBilling\ApiClient\Resource\ArticleCategories;
 use BeckonBilling\ApiClient\Resource\Articles;
 use BeckonBilling\ApiClient\Resource\Auth;
 use BeckonBilling\ApiClient\Resource\Customers;
+use BeckonBilling\ApiClient\Resource\DocumentTerms;
 use BeckonBilling\ApiClient\Resource\OutboundInvoices;
 use BeckonBilling\ApiClient\Resource\Quotes;
 use BeckonBilling\ApiClient\Resource\RecurringInvoices;
+use BeckonBilling\ApiClient\Resource\Units;
 
 /**
  * Entry point for the Beckon Billing REST API (v1).
@@ -31,6 +33,8 @@ use BeckonBilling\ApiClient\Resource\RecurringInvoices;
  * @property-read Customers          $customers
  * @property-read ArticleCategories  $articleCategories
  * @property-read Articles           $articles
+ * @property-read Units              $units             Read-only.
+ * @property-read DocumentTerms      $documentTerms     Read-only.
  * @property-read Quotes             $quotes
  * @property-read OutboundInvoices   $outboundInvoices
  * @property-read RecurringInvoices  $recurringInvoices
@@ -41,6 +45,8 @@ final class Client
     public readonly Customers $customers;
     public readonly ArticleCategories $articleCategories;
     public readonly Articles $articles;
+    public readonly Units $units;
+    public readonly DocumentTerms $documentTerms;
     public readonly Quotes $quotes;
     public readonly OutboundInvoices $outboundInvoices;
     public readonly RecurringInvoices $recurringInvoices;
@@ -60,6 +66,8 @@ final class Client
         $this->customers = new Customers($this->transport);
         $this->articleCategories = new ArticleCategories($this->transport);
         $this->articles = new Articles($this->transport);
+        $this->units = new Units($this->transport);
+        $this->documentTerms = new DocumentTerms($this->transport);
         $this->quotes = new Quotes($this->transport);
         $this->outboundInvoices = new OutboundInvoices($this->transport);
         $this->recurringInvoices = new RecurringInvoices($this->transport);

@@ -40,17 +40,57 @@ info:
     A missing capability returns 403 with `error.key` `send_not_permitted` /
     `bank_not_permitted`.
 
+    Two collections are **read-only** here - `units` and `document-terms`. They
+    are the organisation's vocabulary, which a caller must be able to READ to
+    build a valid document; managing them stays a portal action, and every
+    method but `GET` answers 405. `units` is readable with View on any one of
+    `articles`, `quotes`, `outbound_invoices` or `recurring_invoices`;
+    `document-terms` with View on `quotes` or `outbound_invoices`, and its rows
+    are filtered to the kinds that token may actually view.
+
     ## Conventions
 
-    - **IDs** are opaque UUID strings; integer ids are never exposed.
+    - **IDs** are opaque UUID strings; integer ids are never exposed. (One
+      exception, flagged where it occurs: `RecurringInvoice.document_ids`.)
     - **Lists** are paginated (`limit` default 100, max 500) and return
       `{ data, total, limit, offset }`.
+    - **Creating answers 201**; reading, updating and every action answer 200.
+      Deleting answers 200 with `{ "deleted": true }`.
+    - **Updates are partial.** A `PUT` applies the keys it recognises and leaves
+      the rest of the record alone; a key it does not read is silently ignored
+      (see strict mode below).
     - **Dates** are ISO-8601: calendar-day fields (`issue_date`, `due_date`,
       `valid_until`, `first_run_date`) are `YYYY-MM-DD`; timestamps are full
       offset datetimes. Unset dates are `null`.
     - **Amounts** are decimal net numbers; `tax_percent` is a percentage.
     - **Errors** have the shape `{ "error": { code, message, key } }`; branch on
       the stable `key`.
+
+    ## Strict mode (`?strict=1`)
+
+    Append `?strict=1` to any `POST`/`PUT` and an unrecognised body key answers
+    **400 `unrecognised_keys`**, naming the offenders, instead of being silently
+    discarded. Opt-in, so no existing client can break, and worth turning on in
+    development: the default behaviour cannot tell "saved" from "dropped", which
+    is how a renamed field can cost weeks of silent data loss.
+
+    Two caveats, both real:
+
+    - It checks the request's SHAPE only, and runs BEFORE authentication - so it
+      also works on `POST /auth/login`, which has no token yet.
+    - It **silently does nothing on `/articles` and `/article-categories`**.
+      Those two endpoints declare no key list, and a global flag must not turn
+      an undeclared endpoint into a hard failure. Every other entity here is
+      covered, so do not read a pass on those two as a validated request.
+
+    ## Units are a vocabulary, not free text
+
+    A position's `unit`, and an article's, must be one of the organisation's
+    units (`GET /units`); anything else is refused with **422 `unit_unknown`**.
+    The reason is the printed document: a unit is inflected once the quantity
+    leaves 1 ("12 Monate"), and only a vocabulary entry carries the plural form
+    to inflect to. See `Position.unit` for the escape hatch that keeps existing
+    records saveable.
   license:
     name: MIT
     url: https://github.com/petarbeck/beckonbilling-api-client/blob/main/LICENSE
@@ -74,6 +114,10 @@ tags:
   - name: Customers
   - name: Article categories
   - name: Articles
+  - name: Units
+    description: The organisation's unit vocabulary. Read-only.
+  - name: Document terms
+    description: Terms presets ("Bedingungen"). Read-only.
   - name: Quotes
   - name: Outbound invoices
   - name: Recurring invoices
@@ -180,7 +224,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CustomerInput" }
       responses:
-        "200":
+        "201":
           description: The created customer.
           content:
             application/json:
@@ -245,11 +289,15 @@ paths:
           application/json:
             schema:
               type: object
+              description: >-
+                NOTE: `?strict=1` does NOT validate this endpoint's body - it
+                declares no key list, so an unrecognised key is silently
+                discarded here even with the flag on.
               properties:
                 label: { type: string }
                 fibu_code: { type: string }
       responses:
-        "200":
+        "201":
           description: The created category.
           content:
             application/json:
@@ -277,6 +325,10 @@ paths:
           application/json:
             schema:
               type: object
+              description: >-
+                NOTE: `?strict=1` does NOT validate this endpoint's body - it
+                declares no key list, so an unrecognised key is silently
+                discarded here even with the flag on.
               properties:
                 label: { type: string }
                 fibu_code: { type: string }
@@ -316,7 +368,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ArticleInput" }
       responses:
-        "200":
+        "201":
           description: The created article.
           content:
             application/json:
@@ -421,6 +473,107 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ArticleVariant" }
 
+  /units:
+    get:
+      tags: [Units]
+      summary: List the organisation's unit vocabulary
+      description: >-
+        The short forms a position's `unit` (and an article's) may use. Anything
+        outside this list is refused with 422 `unit_unknown`, so read it before
+        writing positions.
+
+
+        Readable with View on ANY ONE of `articles`, `quotes`,
+        `outbound_invoices` or `recurring_invoices` - a token that may write a
+        document has to be able to read the vocabulary its documents are checked
+        against, and a unit ("Stk.", "h") discloses nothing such a token cannot
+        already read off the documents themselves.
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of units.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UnitList" }
+        "403": { $ref: "#/components/responses/Error" }
+        "405":
+          description: Read-only - every method but GET is refused.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /units/{id}:
+    get:
+      tags: [Units]
+      summary: Read one unit
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The unit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Unit" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /document-terms:
+    get:
+      tags: [Document terms]
+      summary: List terms presets ("Bedingungen")
+      description: >-
+        Where the ids for the write-only `document_term_id` input come from,
+        together with the text and day count each one would apply.
+
+
+        Readable with View on `quotes` or `outbound_invoices`, and the ROWS are
+        filtered to the kinds this token may actually view - a quotes-only token
+        never receives the invoice presets. Asking for a `kind` it cannot view
+        answers an EMPTY LIST rather than 403, which would leak that the other
+        kind exists.
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - name: kind
+          in: query
+          required: false
+          description: Restrict to one document type.
+          schema: { type: string, enum: [quote, outbound_invoice] }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: A page of presets.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentTermList" }
+        "403": { $ref: "#/components/responses/Error" }
+        "405":
+          description: Read-only - every method but GET is refused.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /document-terms/{id}:
+    get:
+      tags: [Document terms]
+      summary: Read one terms preset
+      description: >-
+        A preset of a kind this token may not view answers the same 404
+        `term_not_found` as an unknown or foreign id.
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - $ref: "#/components/parameters/organisation"
+      responses:
+        "200":
+          description: The preset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentTerm" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /quotes:
     get:
       tags: [Quotes]
@@ -445,7 +598,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/QuoteInput" }
       responses:
-        "200":
+        "201":
           description: The created draft.
           content:
             application/json:
@@ -493,16 +646,32 @@ paths:
         - $ref: "#/components/parameters/organisation"
       responses:
         "200":
-          description: The issued quote.
+          description: >-
+            The issued quote, plus `detached_positions` when any line lost a
+            retired catalog reference on the way through.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Quote" }
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Quote"
+                  - type: object
+                    properties:
+                      detached_positions: { $ref: "#/components/schemas/DetachedPositions" }
 
   /quotes/{id}/send:
     post:
       tags: [Quotes]
       summary: Email the quote (requires the `send` capability)
-      description: Issues drafts first and resets a won/lost quote back to issued.
+      description: >-
+        Issues drafts first and resets a won/lost quote back to issued.
+
+
+        **The body is an envelope, not a bare quote** - unlike every other quote
+        action, this answers `{ sent_to, quote }`. A quote with no recipient
+        address and no customer to fall back on is refused with 422
+        `recipient_email_missing`; a mail failure is 502 `mail_send_failed`
+        (unlike an invoice issue, which sends best-effort and reports
+        `send_error` on a 200).
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
@@ -519,12 +688,27 @@ paths:
                   description: Override the attached documents for this send (empty = attach none).
       responses:
         "200":
-          description: The sent quote.
+          description: Where it went, and the quote as it now stands.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Quote" }
+              schema:
+                type: object
+                properties:
+                  sent_to: { type: string, description: The address it was mailed to. }
+                  quote: { $ref: "#/components/schemas/Quote" }
+                  detached_positions: { $ref: "#/components/schemas/DetachedPositions" }
         "403":
           description: Missing `send` capability (`error.key = send_not_permitted`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: No recipient address (`error.key = recipient_email_missing`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: The mail could not be sent (`error.key = mail_send_failed`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -599,7 +783,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/OutboundInvoiceInput" }
       responses:
-        "200":
+        "201":
           description: The created draft.
           content:
             application/json:
@@ -643,7 +827,18 @@ paths:
     post:
       tags: [Outbound invoices]
       summary: Issue the draft and auto-send it (requires the `send` capability)
-      description: Assigns the number, exports the PDF and mails it. A `send_error` field on the result means mailing failed.
+      description: >-
+        Assigns the number, exports the PDF, mints the online payment link and
+        mails it to the customer.
+
+
+        **Three of those are best-effort and never fail the issue, so read the
+        result rather than the status code.** `send_error` means the mail did
+        not go out. `payment_link_error` means the invoice offers online payment
+        with no Stripe link behind it - the customer has no way to pay the way
+        the document tells them to. `detached_positions` means a line lost a
+        retired catalog reference; no figure changed, but it is reported rather
+        than done silently. Each key is present ONLY when that thing happened.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
@@ -657,11 +852,34 @@ paths:
                 document_ids: { type: array, items: { type: string } }
       responses:
         "200":
-          description: The issued invoice.
+          description: The issued invoice, plus any side effect that did not succeed.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/OutboundInvoice" }
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/OutboundInvoice"
+                  - type: object
+                    properties:
+                      send_error:
+                        type: string
+                        description: Present only when mailing the customer failed. The invoice IS issued.
+                      payment_link_error:
+                        type: string
+                        description: >-
+                          Present only when minting the Stripe payment link failed. The invoice IS
+                          issued, but its online payment option has no link behind it.
+                      auto_matched:
+                        type: integer
+                        description: >-
+                          How many existing bank transactions were matched to this invoice as it was
+                          issued (the customer had already paid). Present only when at least one was.
+                      detached_positions: { $ref: "#/components/schemas/DetachedPositions" }
         "403": { $ref: "#/components/responses/Error" }
+        "409":
+          description: Not a draft, or it has no positions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /outbound-invoices/{id}/send:
     post:
@@ -690,15 +908,30 @@ paths:
     post:
       tags: [Outbound invoices]
       summary: Cancel an issued invoice (creates the credit note)
+      description: >-
+        Answers the **credit note that was created**, not the invoice that was
+        cancelled - read `cancels_outbound_invoice_id` on it to name the other
+        half.
+
+
+        Cancelling an invoice that never received money settles that credit note
+        automatically: the pair nets to zero and nobody will ever pay it.
+        Cancelling one that was paid even in part deliberately leaves it OPEN,
+        because that is a real refund owed to the customer.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
       responses:
         "200":
-          description: The cancelled invoice.
+          description: The newly created credit note.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/OutboundInvoice" }
+        "409":
+          description: A draft (delete it instead), or already cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /outbound-invoices/{id}/set-paid:
     put:
@@ -768,7 +1001,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RecurringInvoiceInput" }
       responses:
-        "200":
+        "201":
           description: The created recurring invoice.
           content:
             application/json:
@@ -901,7 +1134,26 @@ components:
         discount_type: { type: string, enum: [none, percent, amount], default: none }
         discount_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
         commission_eligible: { type: boolean }
-        unit: { type: string, description: "Short unit printed after the quantity, e.g. \"h\", \"Stk.\"." }
+        unit:
+          type: string
+          description: >-
+            Short unit printed after the quantity, e.g. "h", "Stk.". **Must be
+            one of the organisation's units** (`GET /units`) - anything else is
+            refused with 422 `unit_unknown`, because only a vocabulary entry
+            carries the plural form the document inflects to.
+
+
+            Two escape hatches, so the rule never blocks an edit that has
+            nothing to do with it. A unit ALREADY STORED on the record you are
+            saving always keeps passing, even after it is retired from the
+            vocabulary - otherwise deleting a unit would make every document
+            that ever used it unsaveable. And a unit INHERITED rather than
+            named passes too: omitting `unit` falls back to the named article's
+            unit and then to the organisation's default, and that value is
+            accepted even when it is itself off-vocabulary, because an article
+            grandfathered that way has to stay sellable. Only a unit the caller
+            genuinely invents is refused. Empty is always fine; a line without a
+            unit is normal.
         unit_plural:
           type: string
           description: >-
@@ -965,6 +1217,93 @@ components:
         label: { type: string }
         value: { type: string }
 
+    DetachedPositions:
+      type: array
+      readOnly: true
+      description: >-
+        Lines whose catalog reference was dropped as the document was issued,
+        because the article behind it had been retired. Nothing about the line's
+        money changes - the position carries its own snapshot of everything that
+        prints - but it is reported rather than done silently. Present only when
+        it happened.
+      items:
+        type: object
+        properties:
+          position: { type: integer, description: 1-based index of the line. }
+          title: { type: string }
+
+    Unit:
+      type: object
+      additionalProperties: true
+      description: >-
+        A unit of measure from the organisation's vocabulary. Read-only here,
+        and the list a position's `unit` is validated against.
+      properties:
+        id: { type: string }
+        short:
+          type: string
+          description: >-
+            The printed short form, e.g. "h", "Stk.", "Monat". THIS is what a
+            position's or article's `unit` must match (case-insensitively).
+        plural:
+          type: string
+          description: >-
+            The form printed once the quantity leaves 1, e.g. "Monate". Empty
+            means the unit does not inflect ("8 h"). Its existence is the reason
+            units are a managed vocabulary rather than free text.
+        label: { type: string, description: The long human name, e.g. "Stunde". }
+        display_label: { type: string, readOnly: true, description: What the portal's pickers show. }
+        position: { type: integer, description: Sort order within the vocabulary. }
+
+    UnitList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Unit" }
+
+    DocumentTerm:
+      type: object
+      additionalProperties: true
+      description: >-
+        A terms preset ("Bedingungen"). Read-only here, and where the ids for the
+        write-only `document_term_id` input come from. Sending that id LOADS this
+        preset's text and days onto a document, which then owns its own snapshot -
+        editing or deleting the preset never changes a document that exists.
+      properties:
+        id: { type: string }
+        kind:
+          type: string
+          enum: [quote, outbound_invoice]
+          description: >-
+            Which document type this preset belongs to. Naming a preset of the
+            wrong kind on a document is refused with 404 `term_not_found`.
+        label: { type: string, description: What this preset is called in the portal. }
+        days:
+          type: integer
+          description: >-
+            Validity (quote) or payment term (invoice) in days. **0 is a real
+            value** meaning due immediately. Applying the preset moves the
+            document's `valid_until` / `due_date` by this many days from its
+            issue date.
+        text: { type: string, description: The wording snapshotted onto the document as `terms_text`. }
+        is_default:
+          type: boolean
+          description: >-
+            Whether a new document of this kind starts from this preset. At most
+            one per organisation and kind.
+
+    DocumentTermList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/DocumentTerm" }
+
     Customer:
       type: object
       additionalProperties: true
@@ -999,10 +1338,50 @@ components:
         homepage: { type: string, description: "Website of this customer, stored without the scheme (e.g. `www.example.at`)." }
         imprint_url: { type: string, description: "Imprint URL. Informational only - never printed on a document." }
         privacy_url: { type: string, description: "Privacy policy URL. Informational only." }
+        address: { type: string }
+        zip: { type: string }
+        city: { type: string }
+        country: { type: string, description: ISO-2 country code. }
+        vat_id: { type: string, description: UID / VAT number, printed on the document. }
+        additional: { type: string, description: Free-form extra address lines. }
+        email: { type: string, description: General address. `recipient_email` is what documents are sent to. }
+        customer_info: { type: string, readOnly: true, description: The composed address block, as printed. }
         recipient_email: { type: string, description: Where this customer's documents are sent. }
         recipient_email_name: { type: string }
         cc_email: { type: string }
         cc_email_name: { type: string }
+        bank_account_holder: { type: string }
+        bank_iban:
+          type: string
+          description: >-
+            Kept grouped and printed as stored. Only the CHARACTER SET is
+            validated (A-Z, 0-9, spaces) - 422 `iban_invalid_characters`
+            otherwise - deliberately not the full IBAN structure, because this
+            field also legitimately holds a US account number.
+        bank_bic: { type: string }
+        document_send_mode:
+          type: string
+          enum: ["", link, attach]
+          description: >-
+            How this customer's documents reach them: a link to the public page,
+            or the PDF attached. **A customer is the ONE level that may leave
+            this empty** ("platform default") - it is a live rule, so an empty
+            value defers to the organisation. A quote or invoice always resolves
+            it to a concrete value at creation, because a document is the record
+            of what was decided for it.
+        partner_id: { type: string, nullable: true, description: Commission partner stamped onto this customer's documents. }
+        partner_commission_percent:
+          type: number
+          description: "-1 = inherit the partner profile's own rate; >= 0 = a per-customer override."
+        hourly_rate:
+          type: number
+          nullable: true
+          description: Null = inherit the organisation's rate. 0 is a real rate meaning free.
+        inherited_rate: { type: number, readOnly: true, description: What hourly_rate would resolve to with no override. }
+        payment_method:
+          type: string
+          readOnly: true
+          description: LEGACY. Read `payment_mode` + `payment_methods` instead.
         contacts:
           type: array
           description: >-
@@ -1075,10 +1454,41 @@ components:
         homepage: { type: string, description: "Website of this customer, stored without the scheme (e.g. `www.example.at`)." }
         imprint_url: { type: string, description: "Imprint URL. Informational only - never printed on a document." }
         privacy_url: { type: string, description: "Privacy policy URL. Informational only." }
+        address: { type: string }
+        zip: { type: string }
+        city: { type: string }
+        country: { type: string, description: ISO-2 country code. }
+        vat_id: { type: string }
+        additional: { type: string }
+        email: { type: string }
         recipient_email: { type: string }
         recipient_email_name: { type: string }
         cc_email: { type: string }
         cc_email_name: { type: string }
+        bank_account_holder: { type: string }
+        bank_iban:
+          type: string
+          description: >-
+            Character-set validated only (422 `iban_invalid_characters`).
+            Writing one here also creates a real bank account for this customer.
+        bank_bic: { type: string }
+        document_send_mode:
+          type: string
+          enum: ["", link, attach]
+          description: Empty = platform default; only a customer may leave it open.
+        partner_id: { type: string, description: Empty clears it. A foreign partner is refused. }
+        partner_commission_percent:
+          type: number
+          nullable: true
+          description: Null or empty clears the override back to the partner profile's rate.
+        hourly_rate:
+          type: number
+          nullable: true
+          description: Null or empty clears the override back to the organisation's rate. 0 means free.
+        name:
+          type: string
+          writeOnly: true
+          description: Legacy alias of `person_name`.
         contacts:
           type: array
           description: Contact people; replaced the flat contact_* trio.
@@ -1168,10 +1578,37 @@ components:
         description: { type: string }
         price: { type: number }
         tax_percent: { type: number }
-        unit: { type: string, description: "Default short unit for lines created from this article, e.g. \"h\", \"Stk.\"." }
+        unit:
+          type: string
+          description: >-
+            Default short unit for lines created from this article, e.g. "h",
+            "Stk.". Must be one of the organisation's units (`GET /units`), or
+            the write is refused with 422 `unit_unknown`; the article's own
+            currently-stored unit always keeps passing.
         article_group_id: { type: string }
+        group_label:
+          type: string
+          readOnly: true
+          description: The category's name, resolved server-side. Empty when uncategorised.
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
+        supply_type:
+          type: string
+          enum: ["", service, goods]
+          description: >-
+            Service or goods, inherited by lines created from this article. It
+            decides which sentence a cross-border document prints - see
+            `Position.supply_type`. Empty behaves as `service`.
+        billing_mode:
+          type: string
+          enum: [one_time, recurring]
+          description: >-
+            The default modality for a quote line created from this article: a
+            single charge, or a fee that repeats.
+        recurring_interval:
+          type: string
+          enum: ["", monthly, quarterly, yearly]
+          description: Only meaningful while `billing_mode` is `recurring`; empty otherwise.
         variant_count:
           type: integer
           readOnly: true
@@ -1182,14 +1619,31 @@ components:
     ArticleInput:
       type: object
       additionalProperties: true
+      description: >-
+        NOTE: `?strict=1` does NOT validate this endpoint's body - it declares no
+        key list, so an unrecognised key is silently discarded here even with the
+        flag on. See the strict-mode section of the introduction.
       properties:
         title: { type: string }
         description: { type: string }
         price: { type: number }
-        tax_percent: { type: number }
+        tax_percent:
+          type: number
+          description: >-
+            Percentage, e.g. 20. Omitted on CREATE, it defaults to the
+            organisation's own default rate - which may legitimately be 0 for a
+            Kleinunternehmer, so never fold a 0 into a fallback.
+        unit:
+          type: string
+          description: >-
+            Must be one of the organisation's units (`GET /units`); anything else
+            is 422 `unit_unknown`.
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
+        supply_type: { type: string, enum: ["", service, goods] }
+        billing_mode: { type: string, enum: [one_time, recurring] }
+        recurring_interval: { type: string, enum: ["", monthly, quarterly, yearly] }
 
     ArticleList:
       allOf:
@@ -1274,12 +1728,35 @@ components:
         version: { type: integer }
         status: { type: string, enum: [draft, issued, won, lost, converted] }
         customer_id: { type: string }
+        customer_label:
+          type: string
+          readOnly: true
+          description: >-
+            The LIVE customer's display name - what a list should show, since it
+            follows a later rename. `recipient` is the frozen snapshot the
+            document prints and deliberately does not. Falls back to the snapshot
+            when the quote has no linked customer.
+        partner_id: { type: string, nullable: true, description: Commission partner. }
+        project_id: { type: string, nullable: true }
         recipient: { $ref: "#/components/schemas/Recipient" }
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
         valid_until: { type: string, format: date, nullable: true }
-        pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
+        email_text: { type: string, description: Cover-mail text. Also emitted as `intro_text` (legacy alias). }
+        pdf_footer: { type: string, description: Printed footer. Was `footer_comment`, which is no longer emitted. }
+        document_ids:
+          type: array
+          items: { type: string }
+          description: UUIDs of the documents attached when this quote is emailed.
+        document_send_mode:
+          type: string
+          enum: [link, attach]
+          description: >-
+            How the document reaches the customer - a link to the public page, or
+            the PDF attached. A quote always carries a concrete value: it is
+            resolved at creation from the customer, else the organisation. Only a
+            CUSTOMER may leave this open.
         reference_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
@@ -1314,6 +1791,24 @@ components:
         net_total: { type: number }
         tax_total: { type: number }
         gross_total: { type: number }
+        converted_outbound_invoice_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: The invoice this quote was converted into, once it was.
+        converted_recurring_invoice_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: >-
+            The recurring template its recurring lines produced, if any. The v1
+            convert action never creates one - see `POST /quotes/{id}/convert`.
+        accepted_at: { type: string, format: date-time, nullable: true, readOnly: true, description: When the customer accepted it on the public page. }
+        has_signature: { type: boolean, readOnly: true, description: Whether that acceptance carries a drawn signature. }
+        rejected_at: { type: string, format: date-time, nullable: true, readOnly: true }
+        rejection_comment: { type: string, readOnly: true }
+        view_count: { type: integer, readOnly: true, description: Opens of the public quote page. }
+        download_count: { type: integer, readOnly: true }
 
     QuoteInput:
       type: object
@@ -1327,22 +1822,72 @@ components:
             document, which then owns its own snapshot. Write-only on purpose -
             nothing records which preset was used, because the document's terms
             are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies.
-        customer_id: { type: string }
+            preset whose text no longer applies. Discover the ids with
+            `GET /document-terms?kind=quote`.
+        terms_text:
+          type: string
+          description: >-
+            Type the terms yourself. Applied AFTER `document_term_id`, so sending
+            both loads the preset and then keeps your wording - which is what
+            "pick a preset and edit it in one request" has to mean.
+        customer_id:
+          type: string
+          description: >-
+            Assigning a customer SNAPSHOTS their recipient, reverse-charge flag,
+            commission partner and default Bedingungen onto the quote - unless
+            the same request states them explicitly, which wins. A customer from
+            another organisation is refused with 404 `customer_not_found`.
+        recipient:
+          allOf: [ { $ref: "#/components/schemas/Recipient" } ]
+          description: >-
+            Type the recipient instead of naming a customer. Wins over the
+            customer's snapshot when both are sent. A `type: consumer` recipient
+            has its printed name composed from salutation + person_name, and
+            carries no `attention` line.
+        recipient_email: { type: string, description: Where this quote is emailed. Wins over the customer's address. }
+        recipient_email_name: { type: string }
+        partner_id:
+          type: string
+          description: >-
+            Commission partner for this quote. A foreign partner is refused; an
+            empty value clears it. Otherwise inherited from the customer.
+        project_id: { type: string, description: Empty clears the link. A foreign project is refused. }
+        document_ids:
+          type: array
+          items: { type: string }
+          description: >-
+            The exact set of attached documents (empty = attach none). Omit to
+            keep the organisation's auto-include selection. A document belonging
+            to another organisation is refused.
+        document_send_mode: { type: string, enum: [link, attach] }
+        email_text: { type: string, description: Cover-mail text for this quote. }
         pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
+        reference_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
         meta_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
+          description: Legacy alias of `reference_fields`. Sending both, this one wins.
         reverse_charge: { type: boolean }
+        deposit_type: { type: string, enum: [none, percent, amount] }
+        deposit_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
         valid_until:
           type: string
           format: date
           description: >-
-            Omit to let the organisation's default terms preset set the validity
-            window. An organisation with no default preset falls back to its
-            quote validity setting.
-        version: { type: integer, minimum: 1, maximum: 99 }
-        status: { type: string, enum: [issued, won, lost] }
+            Omit to let the terms preset set the validity window - the customer's
+            default first, then the organisation's, then its plain quote-validity
+            setting. An explicit value here always wins over all of them; send an
+            empty string to clear it.
+        version: { type: integer, minimum: 1, maximum: 99, description: Forced to 1 while the quote is a draft. }
+        status:
+          type: string
+          enum: [issued, won, lost]
+          description: >-
+            Outcome tracking only. These three may be set on one another; `draft`
+            and `converted` are never settable and a value outside this set is
+            ignored rather than refused.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
@@ -1390,6 +1935,31 @@ components:
           items: { $ref: "#/components/schemas/Position" }
         issue_date: { type: string, format: date, nullable: true }
         due_date: { type: string, format: date, nullable: true }
+        due_days:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: >-
+            The payment term in calendar days, DERIVED as `due_date -
+            issue_date`. Null while either date is unset - an invoice with no due
+            date has no term, and 0 would read as "due today". Writable under the
+            same name on the input, where it MOVES the due date.
+        customer_label:
+          type: string
+          readOnly: true
+          description: >-
+            The LIVE customer's display name - what a list should show, since it
+            follows a later rename. `recipient` and `customer_name` are the
+            frozen snapshot the document prints and deliberately do not.
+        project_id: { type: string, nullable: true }
+        document_send_mode:
+          type: string
+          enum: [link, attach]
+          description: >-
+            How the document reaches the customer - a link to the public page, or
+            the PDF attached. An invoice always carries a concrete value: it is
+            resolved at creation from the customer, else the organisation. Only a
+            CUSTOMER may leave this open.
         paid: { type: boolean }
         paid_amount: { type: number }
         paid_at:
@@ -1467,20 +2037,73 @@ components:
             organisation's language, so print it as given rather than deriving
             your own.
         sent_at: { type: string, format: date-time, nullable: true }
+        payment_methods_effective:
+          type: array
+          readOnly: true
+          items: { type: string, enum: [online, transfer, cash] }
+          description: >-
+            The RESOLVED ways to pay THIS document, which is what to render:
+            empty under `direct_debit` (we collect, so the customer does
+            nothing), the organisation's own defaults under `all`, the document's
+            clipped selection under `individual`. Resolved server-side because
+            `all` needs the organisation - re-deriving it would be a second
+            definition of a money-facing rule. Never render `payment_method`.
+        payment_method:
+          type: string
+          readOnly: true
+          description: >-
+            LEGACY and frozen - it reads `BANK_TRANSFER` on every row ever
+            written, including invoices collected by direct debit. Kept only
+            because v1 readers still expect the key. Read `payment_mode` +
+            `payment_methods_effective` instead.
+        stripe_payment_link_url:
+          type: string
+          readOnly: true
+          description: The online payment link, when the document offers one. Empty otherwise.
+        public_link:
+          type: string
+          readOnly: true
+          description: >-
+            The customer-facing page for this invoice. Empty before it is issued.
+            Its PDF and attachments stop being downloadable 90 days after the
+            issue date.
         net_total: { type: number }
         tax_total: { type: number }
         gross_total: { type: number }
-        partner_id: { type: string, nullable: true }
-        send_error: { type: string, description: Present only if issue/send mailing failed. }
+        partner_id:
+          type: string
+          nullable: true
+          description: >-
+            Commission partner. **Commission accrues to THIS field, not to the
+            customer's partner** - the customer's is copied here when one is
+            assigned, and may then be overridden or cleared for this one invoice.
+        send_error:
+          type: string
+          description: >-
+            Present only if issue/send mailing failed. The invoice IS issued - the
+            send is best-effort and never fails the issue, which is exactly why
+            this has to be read rather than the status code.
+        payment_link_error:
+          type: string
+          description: >-
+            Present only if minting the Stripe payment link failed. The invoice IS
+            issued, but offers online payment with no link behind it, so the
+            customer cannot pay the way the document tells them to.
 
     OutboundInvoiceInput:
       type: object
       additionalProperties: true
+      description: >-
+        A draft accepts everything below. An ISSUED invoice accepts the same
+        keys EXCEPT the recipient-assignment ones (`customer_id`,
+        `recipient_kind`, `recipient_ref_id`), which only apply while it is still
+        a draft - an issued document's recipient is a snapshot.
       properties:
         payment_mode: { type: string, enum: [direct_debit, all, individual] }
         payment_methods:
           type: array
           items: { type: string, enum: [online, transfer, cash] }
+        document_send_mode: { type: string, enum: [link, attach] }
         document_term_id:
           type: string
           writeOnly: true
@@ -1489,13 +2112,92 @@ components:
             document, which then owns its own snapshot. Write-only on purpose -
             nothing records which preset was used, because the document's terms
             are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies.
-        customer_id: { type: string }
-        reverse_charge: { type: boolean }
+            preset whose text no longer applies. Discover the ids with
+            `GET /document-terms?kind=outbound_invoice`.
+        terms_text:
+          type: string
+          description: >-
+            Type the terms yourself. Applied AFTER `document_term_id`, so sending
+            both loads the preset and then keeps your wording.
+        due_days:
+          type: integer
+          minimum: 0
+          description: >-
+            Payment term in days, counted from the issue date; it SETS
+            `due_date`. `0` is a real value meaning due immediately, so send it
+            as a number rather than leaving it out. An explicit `due_days` beats
+            the day count of a `document_term_id` in the same request.
+
+
+            **This key was accepted and silently ignored until portal v1.3.139.**
+            It was read only to switch the terms branch off and then never
+            applied, so neither it nor a preset's days moved the due date. A
+            client that has been sending it as a no-op will now find the due date
+            moving. `due_date` itself is NOT an input - it is read-only.
+        customer_id:
+          type: string
+          description: >-
+            Draft only. Assigning a customer SNAPSHOTS their recipient, addresses,
+            reverse-charge flag, commission partner, payment methods, delivery
+            mode and default Bedingungen onto the invoice - unless the same
+            request states them explicitly, which wins. A customer from another
+            organisation is refused with 404.
+        recipient_kind:
+          type: string
+          enum: [customer, supplier, partner]
+          description: >-
+            Draft only. Bill someone who is not a customer - the path a partner
+            commission credit note takes. `supplier` or `partner` snapshots that
+            record's address and bank details from `recipient_ref_id`, and
+            deliberately CLEARS both `customer_id` and `partner_id`: a credit
+            note to a partner must never itself accrue commission.
+        recipient_ref_id:
+          type: string
+          description: The supplier's or partner's UUID; required when `recipient_kind` is one of those.
+        recipient:
+          allOf: [ { $ref: "#/components/schemas/Recipient" } ]
+          description: The printed recipient block, overriding whatever the customer snapshot supplied.
+        recipient_email: { type: string, description: Where the invoice is emailed. }
+        recipient_email_name: { type: string }
+        cc_email: { type: string }
+        cc_email_name: { type: string }
+        recipient_account_holder:
+          type: string
+          description: >-
+            Where money goes OUT to, on a credit note that will be paid by SEPA
+            credit transfer. These three win over the linked customer's own bank
+            details.
+        recipient_iban: { type: string }
+        recipient_bic: { type: string }
+        partner_id:
+          type: string
+          description: >-
+            Commission partner for this invoice. Empty CLEARS it, which is how you
+            stop an inherited one; a foreign partner is refused. Send it AFTER
+            (or with) `customer_id` - assigning a customer seeds it first, then
+            this overrides.
+        project_id: { type: string, description: Empty clears the link. A foreign project is refused. }
+        document_ids:
+          type: array
+          items: { type: string }
+          description: >-
+            The exact set of attached documents (empty = attach none). Omit to
+            keep the organisation's auto-include selection. A document belonging
+            to another organisation is refused.
+        service_period: { type: string, description: The Leistungszeitraum printed on the document. }
+        tax_label: { type: string, description: Overrides the printed VAT caption. Blank derives "Steuer"/"Tax". }
+        email_text: { type: string, description: Cover-mail text for this invoice. }
         pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
+        pdf_note: { type: string, description: A note printed on the document. Was `invoice_comment`. }
+        payment_qr_code: { type: boolean, description: Print the EPC/Girocode next to the bank details. }
+        reverse_charge: { type: boolean }
+        reference_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
         meta_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
+          description: Legacy alias of `reference_fields`; whichever is present is used.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
@@ -1546,23 +2248,72 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
-        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this TEMPLATE; null = system-generated. Invoices the daily agent generates from it are always system-created (created_by null), regardless of who created the template." }
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this TEMPLATE; null = system-generated. Invoices the automation agent generates from it are always system-created (created_by null), regardless of who created the template." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         label: { type: string }
         customer_id: { type: string }
-        partner_id: { type: string, nullable: true }
+        customer_label: { type: string, readOnly: true, description: The LIVE customer's display name. }
+        partner_id:
+          type: string
+          nullable: true
+          description: >-
+            Commission partner, propagated onto every generated invoice - where
+            it, not the customer's, is what commission accrues to.
+        project_id: { type: string, nullable: true }
         active: { type: boolean }
         interval: { type: string, enum: [daily, weekly, monthly, yearly] }
-        first_run_date: { type: string, format: date, nullable: true }
+        first_run_date:
+          type: string
+          format: date
+          nullable: true
+          description: >-
+            The schedule's ANCHOR, not a one-off first event: it fixes the day of
+            the month (or of the week) that EVERY future run lands on, and moving
+            it moves them all. A monthly or yearly schedule anchored on the 31st
+            is clamped to the end of shorter months.
         next_run_at: { type: string, format: date-time, nullable: true, description: Derived, read-only. }
-        due_days: { type: integer }
-        payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT] }
+        due_days: { type: integer, description: Payment term handed to each generated invoice. }
+        payment_method:
+          type: string
+          enum: [BANK_TRANSFER, DIRECT_DEBIT]
+          description: LEGACY. Read `payment_mode` instead.
+        document_send_mode:
+          type: string
+          enum: ["", link, attach]
+          description: >-
+            How generated invoices reach the customer. A template MAY stay EMPTY,
+            unlike a quote or an invoice: it is a rule, not a record, so leaving
+            it open lets each generated invoice resolve delivery from the customer
+            and then the organisation. A concrete value here overrides both.
         tax_label: { type: string }
+        reverse_charge: { type: boolean }
+        credit_note: { type: boolean, readOnly: true, description: "Derived - true when the positions net negative." }
         terms_text:
           type: string
           description: >-
             The effective payment terms. Copied onto every invoice this template
             generates, alongside the attached documents.
+        email_text: { type: string, description: Cover-mail intro copied onto every generated invoice. }
+        email_body: { type: string, description: Cover-mail body. }
+        pdf_footer: { type: string }
+        pdf_note: { type: string }
+        reference_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
+        document_ids:
+          type: array
+          readOnly: true
+          items: { type: integer }
+          description: >-
+            Documents attached to every generated invoice. **The one place this
+            API exposes INTERNAL INTEGER ids rather than UUIDs** - a wire wart
+            that predates the convention and is not settable through this
+            contract. Do not build on these values; manage the attachments in the
+            portal.
+        last_generated_period:
+          type: string
+          readOnly: true
+          description: The period key the last successful run consumed, which is what stops it billing twice.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
@@ -1572,19 +2323,30 @@ components:
           nullable: true
           readOnly: true
           description: >-
-            The last time the portal's daily agent actually ATTEMPTED to run
-            this template (generate + send) - never set on a run that was
-            skipped because the current period was already generated. Null
-            before the first attempt.
+            The last time the portal's automation agent actually ATTEMPTED to run
+            this template (generate + send) - never set on a run that was skipped
+            because the current period was already generated. Null before the
+            first attempt.
         last_run_error:
           type: string
           readOnly: true
           description: >-
-            The failure message of the last attempted run, empty when it
-            succeeded (or none has been attempted yet). Cleared by the NEXT
-            successful run, so a non-empty value always means "still needs
-            attention" - poll this to detect a template the agent could not
-            bill, e.g. because the organisation has no SMTP configured.
+            The message from the last attempted run, empty when it succeeded (or
+            none has been attempted yet). Cleared by the NEXT successful run, so a
+            non-empty value always means "still needs attention" - poll it to
+            detect a template the agent could not bill, e.g. because the
+            organisation has no SMTP configured. **Read `last_run_severity`
+            before calling it a failure**: some messages describe a run that DID
+            produce the invoice.
+        last_run_severity:
+          type: string
+          enum: ["", warning, error]
+          readOnly: true
+          description: >-
+            What `last_run_error` means. Empty when there is no message; `error`
+            when nothing was billed; `warning` when the invoice WAS generated,
+            exported and sent and something after it needs a look. Without this,
+            every message reads as a failed run.
 
     RecurringInvoiceInput:
       type: object
@@ -1602,16 +2364,62 @@ components:
             document, which then owns its own snapshot. Write-only on purpose -
             nothing records which preset was used, because the document's terms
             are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies.
+            preset whose text no longer applies. Discover the ids with
+            `GET /document-terms?kind=outbound_invoice`.
+        terms_text:
+          type: string
+          description: >-
+            Type the terms yourself; applied AFTER `document_term_id`, so sending
+            both loads the preset and keeps your wording. Copied onto every
+            generated invoice.
         label: { type: string }
-        customer_id: { type: string }
-        partner_id: { type: string }
+        customer_id:
+          type: string
+          description: >-
+            Assigning a customer applies their default Bedingungen to the
+            template. A customer from another organisation is refused with 404.
+        partner_id:
+          type: string
+          description: >-
+            Commission partner stamped onto every generated invoice - so a wrong
+            value here misdirects commission repeatedly, not once. Empty clears
+            it; a foreign partner is refused.
+        project_id: { type: string, description: Empty clears the link. A foreign project is refused. }
         active: { type: boolean }
         interval: { type: string, enum: [daily, weekly, monthly, yearly] }
-        first_run_date: { type: string, format: date }
-        due_days: { type: integer }
-        payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT] }
+        first_run_date:
+          type: string
+          format: date
+          description: >-
+            The schedule ANCHOR - it fixes the day every future run lands on, not
+            just the first. Changing it reseeds `next_run_at`.
+        service_period_mode:
+          type: string
+          enum: [current, previous, ahead, behind, none]
+          description: Which period each generated invoice states. See the output schema for what each prints.
+        due_days:
+          type: integer
+          description: >-
+            Payment term handed to each generated invoice. An explicit value beats
+            the day count of a `document_term_id` in the same request.
+        document_send_mode:
+          type: string
+          enum: ["", link, attach]
+          description: Empty deliberately allowed here - see the output schema.
+        payment_mode: { type: string, enum: [direct_debit, all, individual] }
+        payment_methods:
+          type: array
+          items: { type: string, enum: [online, transfer, cash] }
+        payment_method: { type: string, enum: [BANK_TRANSFER, DIRECT_DEBIT], description: LEGACY. }
         tax_label: { type: string }
+        reverse_charge: { type: boolean }
+        email_text: { type: string, description: Cover-mail intro for every generated invoice. }
+        email_body: { type: string, description: Cover-mail body. }
+        pdf_footer: { type: string }
+        pdf_note: { type: string }
+        reference_fields:
+          type: array
+          items: { $ref: "#/components/schemas/ReferenceField" }
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }

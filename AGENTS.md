@@ -9,9 +9,10 @@ is [`openapi.yaml`](openapi.yaml); this file is the client-usage companion.)
 
 A thin, typed PHP wrapper over the Beckon Billing public REST API (`/api/v1`).
 Namespace `BeckonBilling\ApiClient\`, PHP `>=8.2`, PSR-4, PSR-18/PSR-17 for
-transport. It exposes six entities (customers, article categories, articles,
-quotes, outbound invoices, recurring invoices) plus user-token auth. It holds
-no secrets; a valid API token is required to do anything.
+transport. It exposes eight entities - six writable (customers, article
+categories, articles, quotes, outbound invoices, recurring invoices) and two
+read-only (units, document terms) - plus user-token auth. It holds no secrets; a
+valid API token is required to do anything.
 
 ## Install
 
@@ -81,16 +82,20 @@ $client->auth->me();                                          // current user + 
 Access via properties on `$client`. `$options` (last arg everywhere) is an
 assoc array; its common key is `organisation`.
 
-### Common CRUD (all six entity resources)
+### Common CRUD (the six writable entity resources)
 
 ```php
 $res->list(array $query = [], array $options = []): Collection   // paginated page
 $res->autoPaging(array $query = [], array $options = []): Generator // lazy over all pages
 $res->get(string $id, array $options = []): Model
-$res->create(array $data, array $options = []): Model
+$res->create(array $data, array $options = []): Model              // 201
 $res->update(string $id, array $data, array $options = []): Model  // partial (PUT)
 $res->delete(string $id, array $options = []): void                // soft-delete
 ```
+
+`units` and `documentTerms` are **read-only**: `list()`, `autoPaging()` and
+`get()` only. `create`/`update`/`delete` throw a `\LogicException` locally
+rather than making a request the API answers 405.
 
 Resource properties and their models:
 
@@ -99,6 +104,8 @@ Resource properties and their models:
 | `$client->customers` | `customers` | `Model\Customer` | `customers` |
 | `$client->articleCategories` | `article-categories` | `Model\ArticleCategory` | `articles` |
 | `$client->articles` | `articles` | `Model\Article` | `articles` |
+| `$client->units` | `units` | `Model\Unit` | any of `articles`/`quotes`/`outbound_invoices`/`recurring_invoices` |
+| `$client->documentTerms` | `document-terms` | `Model\DocumentTerm` | `quotes` or `outbound_invoices` |
 | `$client->quotes` | `quotes` | `Model\Quote` | `quotes` |
 | `$client->outboundInvoices` | `outbound-invoices` | `Model\OutboundInvoice` | `outbound_invoices` |
 | `$client->recurringInvoices` | `recurring-invoices` | `Model\RecurringInvoice` | `recurring_invoices` |
@@ -108,19 +115,45 @@ Resource properties and their models:
 ```php
 ->issue(string $id, array $options = []): Quote            // assign number
 ->send(string $id, array $data = [], array $options = []): Quote   // email PDF; needs `send`; $data may hold 'document_ids'
-->convert(string $id, array $options = []): array          // ['invoice_id'=>?string,'quote'=>?Quote]; needs outbound_invoices Full
+->sendResult(string $id, array $data = [], array $options = []): array // ['sent_to','quote','detached_positions']
+->convert(string $id, array $options = []): array          // ['outbound_invoice_id'=>?string,'quote'=>?Quote]; needs outbound_invoices Full
 ->pdf(string $id, array $options = []): string             // raw PDF bytes (409 for drafts)
 ```
+
+`send` is the one quote action whose HTTP body is an ENVELOPE (`{sent_to,
+quote}`) rather than a bare quote; `send()` unwraps it for you and
+`sendResult()` hands you the whole thing. A quote with no recipient address and
+no customer to fall back on is 422 `recipient_email_missing`; a mail failure is
+502 `mail_send_failed` - unlike an invoice issue, which sends best-effort.
 
 ### Outbound-invoice actions (`$client->outboundInvoices`)
 
 ```php
-->issue(string $id, array $data = [], array $options = []): OutboundInvoice  // issue + auto-send; needs `send`; check ->send_error
+->issue(string $id, array $data = [], array $options = []): OutboundInvoice  // issue + auto-send; needs `send`
 ->send(string $id, array $data = [], array $options = []): OutboundInvoice   // (re-)send; needs `send`
-->cancel(string $id, array $options = []): OutboundInvoice                   // creates the credit note
+->cancel(string $id, array $options = []): OutboundInvoice                   // returns the CREDIT NOTE it created
 ->setPaid(string $id, bool $paid, array $options = []): OutboundInvoice      // needs `bank`; false 409s if tx-linked payments exist
 ->pdf(string $id, array $options = []): string                              // raw PDF bytes (409 for drafts)
 ```
+
+**`issue()` has two side effects that never fail the call, so check the result,
+not the status code:**
+
+```php
+$issued = $client->outboundInvoices->issue($id);
+if ($issued->send_error)         { /* the customer was NOT emailed */ }
+if ($issued->payment_link_error) { /* it offers online payment with no link behind it */ }
+```
+
+Both keys are present only when that thing went wrong. `payment_link_error` is
+the one people miss: the invoice goes out telling the customer to pay online,
+and the button leads nowhere.
+
+`cancel()` answers the **credit note that was created**, not the invoice that
+was cancelled - read `cancels_outbound_invoice_id` on it to name the other half.
+Cancelling an invoice that never received money settles that credit note
+automatically; one that was paid even in part leaves it open, because that is a
+real refund owed to the customer.
 
 Paid state is read back as derived, never-writable fields: `settlement_status`,
 `paid` (bool), `paid_amount`, `remaining_amount`, and `paid_at`. `paid_at` is
@@ -172,6 +205,75 @@ you whether an article has any without a second request.
 A document line names one with `article_variant_id`; the resolved values plus
 `variant_label` are then snapshotted onto the line, so deleting or renaming the
 variant later never changes what a document says was sold.
+
+### Units (`$client->units`) - read-only
+
+The organisation's unit vocabulary, and **the list the server validates a
+position's `unit` against**: anything outside it is refused with 422
+`unit_unknown`. So this is not a display nicety - read it before writing
+positions and pick a `short` from it.
+
+```php
+foreach ($client->units->autoPaging() as $unit) {
+    echo $unit->short, ' ', $unit->plural, "\n";   // "Monat" "Monate"
+}
+```
+
+Why it is a vocabulary rather than free text: a document prints the unit
+INFLECTED once the quantity leaves 1 ("12 Monate", not "12 Monat"), and only a
+vocabulary entry carries a plural to inflect to. Empty `plural` means the unit
+does not inflect ("8 h").
+
+Two things that bite:
+
+- The check runs on the **resolved** unit. Omitting `unit` does not skip it - it
+  falls back to the named article's unit and then to the organisation's default,
+  and it is *that* value which must be known.
+- A unit **already stored** on the record you are saving always keeps passing,
+  even after it is retired from the vocabulary. Otherwise deleting a unit would
+  make every document that ever used it unsaveable, for edits that have nothing
+  to do with it.
+
+Readable by any token with View on any one of `articles`, `quotes`,
+`outbound_invoices` or `recurring_invoices` - a token allowed to write a
+document must be able to read what its documents are checked against.
+
+### Document terms (`$client->documentTerms`) - read-only
+
+Terms presets ("Bedingungen"), and where the ids for the write-only
+`document_term_id` input come from:
+
+```php
+$presets = $client->documentTerms->list(['kind' => 'outbound_invoice']);
+$client->outboundInvoices->create([
+    'customer_id'      => $customerId,
+    'document_term_id' => $presets->data[0]->id,   // loads its text AND its days
+    'positions'        => [ /* ... */ ],
+]);
+```
+
+`days` is the payment term (or validity) the preset applies - and `0` is a real
+value meaning due immediately, so never fold it into a fallback. Rows are
+filtered to the kinds the token may view: a quotes-only token never sees the
+invoice presets, and asking for a kind it cannot view answers an EMPTY LIST
+rather than 403 (which would leak that the other kind exists).
+
+### Strict mode (`?strict=1`)
+
+Pass it as a query option on any write and an unrecognised body key answers
+**400 `unrecognised_keys`** naming the offenders, instead of being silently
+discarded:
+
+```php
+$client->customers->create($data, ['query' => ['strict' => 1]]);
+```
+
+Opt-in, so nothing existing breaks - and worth turning on in development,
+because the default behaviour cannot tell "saved" from "dropped". Two caveats:
+it checks the request's shape only and runs before authentication (so it works
+on `auth->login()` too), and it **silently does nothing on `/articles` and
+`/article-categories`**, which declare no key list. Do not read a pass on those
+two as a validated request.
 
 ### List filters
 
@@ -225,7 +327,7 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `PermissionException` | 403 | `missing_permission`, `send_not_permitted`, `bank_not_permitted` |
 | `NotFoundException` | 404 | absent or foreign-organisation |
 | `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked) |
-| `ValidationException` | 400/422 | rejected payload |
+| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`) |
 | `RateLimitException` | 429 | back off |
 | `ServerException` | 5xx | retryable |
 | `TransportException` | 0 | network failure; original PSR-18 error is `->getPrevious()` |
@@ -276,9 +378,9 @@ $client->outboundInvoices->setPaid($issued->id(), true);     // needs `bank`
 $quote  = $client->quotes->create(['customer_id' => $customerId, 'positions' => [/* ... */]]);
 $client->quotes->issue($quote->id());
 $result = $client->quotes->convert($quote->id());            // needs outbound_invoices Full
-$newInvoiceId = $result['invoice_id'];
+$newInvoiceId = $result['outbound_invoice_id'];
 
-// Recurring template (generated automatically by the daily agent)
+// Recurring template (generated automatically by the portal's agent)
 $client->recurringInvoices->create([
     'label' => 'Hosting', 'customer_id' => $customerId,
     'interval' => 'monthly', 'first_run_date' => '2026-08-01',
@@ -288,10 +390,23 @@ $client->recurringInvoices->create([
 
 ## Field conventions (from the API)
 
-- IDs are opaque UUID strings.
+- IDs are opaque UUID strings. The ONE exception is
+  `RecurringInvoice.document_ids`, which carries internal integer ids and is not
+  settable through this contract - do not build on it.
 - Dates: calendar-day fields (`issue_date`, `due_date`, `valid_until`,
   `first_run_date`) are `YYYY-MM-DD`; timestamps are ISO offset datetimes; unset
   = `null`.
+- **`due_days` on an outbound invoice is the payment term**, in calendar days
+  from the issue date, and it is the key that MOVES `due_date` - `due_date`
+  itself is read-only and has never been an input. It reads back derived
+  (`due_date - issue_date`, null while either is unset). `0` is a real value
+  meaning due immediately. **It was accepted and silently ignored until portal
+  v1.3.139**, so if you have been sending it as a no-op, it now takes effect.
+  An explicit `due_days` beats the day count of a `document_term_id` sent in the
+  same request.
+- `RecurringInvoice.last_run_error` comes with **`last_run_severity`**
+  (`''` | `warning` | `error`). Read it before calling a run failed: some
+  messages describe a run that DID generate, export and send the invoice.
 - Amounts are decimal net numbers; `tax_percent` is a percent (e.g. `20`).
 - **Never re-derive line money.** Each position carries read-only `line_net`,
   `line_tax` and `line_gross`. `quantity * price` is wrong for any line with a
@@ -334,9 +449,13 @@ $client->recurringInvoices->create([
   document. An empty plural means the unit does not inflect (`8 h`).
 - Quotes and invoices carry `terms_text`: the effective payment/validity terms,
   snapshotted from the organisation's default terms preset at creation.
-  `document_term_id` is provenance only. Editing or deleting a preset never
-  changes an issued document. Omit `valid_until`/`due_date` on create to let the
-  preset supply the window.
+  Editing or deleting a preset never changes an issued document.
+  - On a QUOTE, omit `valid_until` on create to let the preset supply the
+    window.
+  - On an INVOICE there is no `due_date` input at all - it is read-only. The key
+    that moves the date is **`due_days`** (see below).
+  - `document_term_id` is write-only: it LOADS a preset's text and days. Browse
+    the presets with `$client->documentTerms->list(['kind' => 'quote'])`.
 - Quotes support a down payment: `deposit_type`/`deposit_value` in, resolved
   `deposit_amount` + `remaining_amount` out.
 - Quotes and invoices carry `small_business` (the issuer's Kleinunternehmer VAT
@@ -355,8 +474,19 @@ $client->recurringInvoices->create([
 - Downloading a **draft** PDF 409s - issue it first.
 - **Deleting** an issued invoice 409s - `cancel()` it (creates a credit note).
 - `setPaid($id, false)` 409s while transaction-linked payments exist.
-- Recurring invoices have **no generate endpoint** - the portal's daily agent
-  creates invoices from them.
-- Only these six entities are on `/api/v1` (plus article variants, as a
+- Recurring invoices have **no generate endpoint**. The portal's automation
+  agent creates invoices from them, once a day at 08:00 in the ORGANISATION's
+  own timezone - so a poller watching `next_run_at` sees a per-organisation
+  local schedule, not one fixed UTC hour.
+- Only these eight entities are on `/api/v1` (plus article variants, as a
   sub-collection of an article); suppliers, projects, inbound invoices,
   banking, etc. are portal-internal and not reachable with a token.
+- **Creating answers 201**, not 200. Everything else answers 200.
+- A free-text `unit` is refused (422 `unit_unknown`) - pick one from
+  `$client->units`. See the Units section for the two ways this surprises you.
+- `quotes->send()` answers an envelope on the wire, not a bare quote (the client
+  unwraps it); `outboundInvoices->cancel()` answers the CREDIT NOTE, not the
+  invoice you cancelled.
+- An unrecognised body key is **silently discarded** unless you pass
+  `?strict=1` - which itself does nothing on `/articles` and
+  `/article-categories`.

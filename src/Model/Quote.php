@@ -17,8 +17,13 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read array|null  $recipient
  * @property-read array|null  $positions       Line items.
  * @property-read string|null $valid_until     ISO YYYY-MM-DD.
- * @property-read string|null $intro_text      Email cover text.
- * @property-read string|null $footer_comment  PDF footer.
+ * @property-read string|null $email_text      Email cover text. Also emitted as `intro_text` (legacy alias).
+ * @property-read string|null $intro_text      Legacy alias of email_text.
+ * @property-read string|null $pdf_footer      Printed footer. Was `footer_comment`, which is no longer emitted.
+ * @property-read string|null $project_id
+ * @property-read string|null $partner_id
+ * @property-read array|null  $document_ids    Attached document UUIDs.
+ * @property-read string|null $document_send_mode "link" | "attach".
  * @property-read array|null  $reference_fields
  * @property-read bool|null   $reverse_charge
  * @property-read string|null $terms_text      Snapshotted payment/validity terms (from the org's terms preset).
@@ -33,6 +38,12 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total
  * @property-read float|null  $gross_total
+ * @property-read string|null $converted_outbound_invoice_id  Set once the quote was converted.
+ * @property-read string|null $converted_recurring_invoice_id Set when its recurring half produced a template.
+ * @property-read string|null $accepted_at     ISO datetime; set when the customer accepted it online.
+ * @property-read bool|null   $has_signature   Whether that acceptance carries a drawn signature.
+ * @property-read string|null $rejected_at     ISO datetime; set when the customer declined it online.
+ * @property-read string|null $rejection_comment
  * @property-read int|null    $view_count
  * @property-read int|null    $download_count
  */

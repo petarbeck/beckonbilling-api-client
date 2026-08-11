@@ -30,7 +30,12 @@ final class OutboundInvoices extends AbstractResource
     /**
      * Issue the draft: assigns the number, exports the PDF and auto-sends it to
      * the customer. Requires `outbound_invoices` Full **and** the `send`
-     * capability. A `send_error` field on the result means mailing failed.
+     * capability.
+     *
+     * Two side effects are best-effort and never fail the issue, so CHECK BOTH
+     * on the result: `send_error` means the mail did not go out, and
+     * `payment_link_error` means the invoice offers online payment with no
+     * Stripe link behind it. Present only when they happened.
      *
      * @param array<string,mixed> $data     e.g. ['document_ids' => [...]].
      * @param array<string,mixed> $options
@@ -59,8 +64,13 @@ final class OutboundInvoices extends AbstractResource
     }
 
     /**
-     * Cancel an issued invoice (creates the credit note). Requires
-     * `outbound_invoices` Full.
+     * Cancel an issued invoice. Requires `outbound_invoices` Full.
+     *
+     * Returns the **credit note that was created**, not the invoice that was
+     * cancelled - read `cancels_outbound_invoice_id` on it to name the other
+     * half. A cancellation of an invoice that never received money settles that
+     * credit note automatically; one that was paid even in part leaves it open,
+     * because that is a real refund owed to the customer.
      *
      * @param array<string,mixed> $options
      */

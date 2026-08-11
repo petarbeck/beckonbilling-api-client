@@ -7,7 +7,8 @@
 The official PHP client for the [Beckon Billing](https://www.beckonbilling.com)
 REST API (v1) - a small, typed, idiomatic wrapper over the public
 `/api/v1` surface: customers, article categories, articles, quotes, outbound
-invoices and recurring invoices, plus user-token authentication.
+invoices and recurring invoices, the read-only units and document-terms
+vocabularies, plus user-token authentication.
 
 - **PSR-4 / PHP `>=8.2`**, no framework required.
 - **Bring your own HTTP client** - any [PSR-18](https://www.php-fig.org/psr/psr-18/)
@@ -118,14 +119,17 @@ A user token with exactly one organisation may omit it entirely.
 | `$client->customers` | Customers | `customers` |
 | `$client->articleCategories` | Article categories | `articles` |
 | `$client->articles` | Articles | `articles` |
+| `$client->units` | Units (read-only) | any document feature |
+| `$client->documentTerms` | Terms presets (read-only) | `quotes` / `outbound_invoices` |
 | `$client->quotes` | Quotes | `quotes` |
 | `$client->outboundInvoices` | Outbound invoices | `outbound_invoices` |
 | `$client->recurringInvoices` | Recurring invoices | `recurring_invoices` |
 | `$client->auth` | User-token auth | - |
 
-Each entity resource offers `list()`, `autoPaging()`, `get()`, `create()`,
+Each writable resource offers `list()`, `autoPaging()`, `get()`, `create()`,
 `update()`, `delete()`. Quotes and invoices add lifecycle actions
-(`issue`, `send`, `convert`/`cancel`, `setPaid`, `pdf`).
+(`issue`, `send`, `convert`/`cancel`, `setPaid`, `pdf`); articles add variants.
+`units` and `documentTerms` are read-only - `list()`, `autoPaging()`, `get()`.
 
 ## Pagination
 
