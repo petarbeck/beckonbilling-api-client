@@ -2115,7 +2115,7 @@ components:
           type: string
           description: >-
             Assigning a customer SNAPSHOTS their recipient, reverse-charge flag,
-            commission partner and default Bedingungen onto the quote - unless
+            commission partner and document defaults onto the quote - unless
             the same request states them explicitly, which wins. A customer from
             another organisation is refused with 404 `customer_not_found`.
         recipient:
@@ -2164,10 +2164,11 @@ components:
           type: string
           format: date
           description: >-
-            Omit to let the terms preset set the validity window - the customer's
-            default first, then the organisation's, then its plain quote-validity
-            setting. An explicit value here always wins over all of them; send an
-            empty string to clear it.
+            Omit to let the document template set the validity window - the
+            customer's own day count first (when their switch is on), then the
+            customer's template, then the organisation's default template, then
+            a 30-day fallback. An explicit value here always wins over all of
+            them; send an empty string to clear it.
         version: { type: integer, minimum: 1, maximum: 99, description: Forced to 1 while the quote is a draft. }
         status:
           type: string
@@ -2504,7 +2505,7 @@ components:
             **This key was accepted and silently ignored until portal v1.4.x.**
             It was read only to switch the terms branch off and then never
             applied, so a request CARRYING it moved nothing - neither the key
-            itself nor the days of a terms preset sent beside it, because
+            itself nor the days of a template sent beside it, because
             its mere presence disabled that branch. A request without it was
             unaffected, so a preset alone always worked. A client that has been
             sending it as a no-op will now find the due date moving.
@@ -2514,7 +2515,7 @@ components:
           description: >-
             Draft only. Assigning a customer SNAPSHOTS their recipient, addresses,
             reverse-charge flag, commission partner, payment methods, delivery
-            mode and default Bedingungen onto the invoice - unless the same
+            mode and document defaults onto the invoice - unless the same
             request states them explicitly, which wins. A customer from another
             organisation is refused with 404.
         recipient_kind:
@@ -2769,7 +2770,7 @@ components:
         customer_id:
           type: string
           description: >-
-            Assigning a customer applies their default Bedingungen to the
+            Assigning a customer applies their document defaults to the
             template. A customer from another organisation is refused with 404.
         partner_id:
           type: string

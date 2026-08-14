@@ -3,6 +3,124 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-08-14
+
+Terms presets became document templates, and a quote can now be billed as a
+down payment plus a remainder. **Three things break; the first two are the ones
+that will show up as errors in your log.**
+
+### Changed (BREAKING)
+
+- **`document_term_id` is retired: sending it answers 422
+  `document_term_id_retired`.** Send **`document_template_id`** instead, on
+  quotes, outbound invoices and recurring invoices alike. The key is refused for
+  any value at all, including `null` and `''`, because it is tested for
+  PRESENCE.
+
+  It is refused rather than ignored deliberately. Ignoring it would leave the
+  document on the organisation's default template and move `valid_until` /
+  `due_date` with it, so a caller who believed they had chosen a preset would
+  get a document with different wording and a different date, and nothing would
+  have failed.
+
+- **`GET /api/v1/document-terms` was removed and now answers 404.**
+  **`GET /api/v1/document-templates`** replaced it, read-only in the same way,
+  filtered per kind, and it is where `document_template_id` values come from.
+
+  Two traps in the swap:
+
+  - **The kind is `invoice`, not `outbound_invoice`.** A kind copied out of
+    working code against the old endpoint is simply an unknown value now.
+  - A template is the bigger thing a terms preset was one part of. Besides the
+    wording and the day count it carries the second terms text, the printed
+    footer, the cover-mail text, the attachments a new document starts with,
+    and per kind the quote's default down payment or the invoice's bank
+    details. The organisation's DEFAULT template is now its document setting,
+    which is why those fields left the organisation payload.
+
+  In this client: `$client->documentTerms` and the `DocumentTerm` /
+  `DocumentTerms` classes are gone, replaced by `$client->documentTemplates`
+  and `DocumentTemplate` / `DocumentTemplates`. Keeping the old property would
+  have left a resource that can only ever answer 404.
+
+- **A customer's document defaults are twelve fields, not six.**
+  `quote_document_term_id` and `invoice_document_term_id` were removed;
+  **`quote_template_id`** and **`invoice_template_id`** replaced them, and an id
+  that is unknown, foreign or of the wrong kind answers 404
+  `document_template_not_found`. Beside each sits the second terms text and, for
+  both texts, an explicit switch: `*_terms_override` / `*_terms_text` and
+  `*_payment_terms_override` / `*_payment_terms_text`, six per document kind.
+
+  **The switch is a real boolean, not "the text is non-empty."** On with an
+  empty text is the meaningful combination "print nothing for this customer",
+  which a text-is-empty test cannot express; off means "use the template". If
+  you infer the switch from the text you will silently turn the first setting
+  into the second.
+
+- **`Quotes::convert()` takes the scope as its second argument**, so a call
+  written as `convert($id, ['organisation' => $uuid])` now raises a `TypeError`.
+  Move the options to the third argument: `convert($id, null, $options)`. The
+  scope is a typed string rather than an array precisely so this fails loudly
+  instead of quietly posting your options as a request body and dropping the
+  organisation scope.
+
+### Added
+
+- **Every document carries TWO terms texts**: `terms_text` and the new
+  **`payment_terms_text`**, on quotes, outbound invoices and recurring
+  invoices, in and out. Printed in that order. One pair of names everywhere;
+  only the label the portal shows differs per kind.
+
+  Additive on the wire, but read this before upgrading the portal: **an
+  invoice's `terms_text` is empty by default now**, because the "payable by
+  {due_date}" sentence moved into `payment_terms_text`. A client that renders
+  only `terms_text` will print nothing on a typical invoice.
+
+  Two rules the field name does not give away: on a QUOTE the second text is
+  the down-payment wording and prints only when the quote carries a real down
+  payment (type set AND value above zero); and converting a quote does not
+  carry the field onto the invoice, since it means deposit terms on the one and
+  payment terms on the other.
+
+- **A quote can be billed in stages.** `POST /quotes/{id}/convert` takes an
+  optional **`scope`** (`full` | `deposit` | `final`). Omitting it bills the
+  whole one-time part exactly as before, so nothing changes for a caller who
+  ignores this. An unknown value answers 422 `invoice_scope_unknown` rather
+  than falling back to `full`, which would silently bill the entire amount. The
+  staged refusals (`quote_has_no_deposit`, `deposit_invoice_exists`,
+  `no_deposit_invoice`, `quote_has_draft_invoice`, `final_invoice_exists`,
+  `quote_has_deposit_invoice`) are documented by error key in `openapi.yaml`.
+
+- **`OutboundInvoice.invoice_scope`** (`full` | `deposit` | `final`, read-only)
+  says which part of its quote an invoice bills. Everything not created as a
+  staged invoice reports `full`, including every invoice issued before the
+  field existed.
+
+  **If you total revenue, read this.** A down payment and a final invoice
+  ALREADY sum to the quote: the final invoice lists the full one-time lines and
+  then carries a NEGATIVE deduction line per tax rate for what the down payment
+  covered, so its own `gross_total` is the remainder. Adding the two as if each
+  were the whole amount double-counts, and filtering the negative lines out as
+  bad data breaks the total.
+
+- **`OutboundInvoice.quote_id`** (read-only, nullable) is the full trail back to
+  the quote. Use it rather than `Quote.converted_outbound_invoice_id`, which
+  holds a single id and therefore cannot describe a quote billed as two
+  invoices.
+
+- `deposit_type` gains **`goods_percent`** and **`service_percent`**, applying a
+  percentage to only the goods or only the service lines, decided per line by
+  its `supply_type`.
+
+### Fixed (documentation only, no server change)
+
+- The down-payment figures were described against the wrong basis.
+  `deposit_amount` is capped to the ONE-TIME gross (or only its goods or
+  service part for the two new types), never to `gross_total`, which includes
+  recurring lines a down payment never covers; `Quote.remaining_amount` is
+  measured against that same one-time basis. `deposit_value` is a percent for
+  three of the five types, not one.
+
 ## [0.11.0] - 2026-08-11
 
 ### Added

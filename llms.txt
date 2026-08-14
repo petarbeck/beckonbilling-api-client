@@ -13,7 +13,9 @@ Key facts for an assistant:
 - `units` and `documentTemplates` are read-only (list/get); writing to them throws `\LogicException`.
 - Actions: quotes `issue/send/sendResult/convert/pdf`; invoices `issue/send/cancel/setPaid/pdf`. Articles also carry variants: `variants/createVariant/updateVariant`.
 - Errors: typed subclasses of `ApiException`; branch on `getErrorKey()`. Capabilities `send`/`bank` gate email/money actions.
-- Traps worth knowing: a position's `unit` is adopted into the vocabulary if unknown and reads back in the vocabulary's spelling; `due_days` (not `due_date`) sets an invoice's payment term; `issue()` reports `send_error` and `payment_link_error` on a 200; `cancel()` returns the credit note.
+- Terms: every document carries TWO texts, `terms_text` and `payment_terms_text`, printed in that order. Load a preset with the write-only `document_template_id` (the old `document_term_id` answers 422 `document_term_id_retired`); browse them via `$client->documentTemplates->list(['kind' => 'quote'|'invoice'])` - the kind is `invoice`, not `outbound_invoice`.
+- Staged billing: `$client->quotes->convert($id, 'deposit'|'final'|null)`. The invoice reports `invoice_scope` and names its quote in `quote_id`. A deposit and a final invoice ALREADY sum - the final one carries negative deduction lines - so never add them as if each were the whole amount.
+- Traps worth knowing: a position's `unit` is adopted into the vocabulary if unknown and reads back in the vocabulary's spelling; `due_days` (not `due_date`) sets an invoice's payment term; an invoice's `terms_text` is empty by default, so rendering only that field prints nothing; `issue()` reports `send_error` and `payment_link_error` on a 200; `cancel()` returns the credit note.
 
 ## Docs
 
