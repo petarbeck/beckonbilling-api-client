@@ -112,6 +112,34 @@ that will show up as errors in your log.**
   percentage to only the goods or only the service lines, decided per line by
   its `supply_type`.
 
+### Changed (values, not schema - nothing is refused that used to pass)
+
+- **Converting a quote now starts the invoice from a template, like every other
+  way of creating one.** `POST /quotes/{id}/convert` resolves the same chain a
+  hand-made invoice does - the customer's own terms and day count, else their
+  template, else the organisation's default invoice template - and the resulting
+  invoice carries `terms_text`, `payment_terms_text`, a `due_date` and the
+  template's default attachments. No key is added, removed or renamed; the
+  VALUES on three fields change.
+
+  What they were, and why this is a repair rather than a preference:
+
+  - `terms_text` held the **quote's** wording. The seeded quote text is
+    literally "This quote is valid until {valid_until}." - a macro an invoice
+    does not have, and rendering is a plain substitution, so the brace was
+    **printed** on the PDF and the public document page.
+  - `payment_terms_text` was empty, so the invoice said nothing about payment.
+  - `due_date` was **`null`**, and issuing fell back to a 7-day default that
+    matched neither the customer nor the template.
+
+  **The one to check in your code is `due_date`**: a client that treated it as
+  always null on a freshly converted invoice now reads a date. Everything that
+  reads the two texts gets a filled value where it used to get the wrong one or
+  none.
+
+  Same for the MCP tool `convert_quote_to_invoice`, which goes through the same
+  service.
+
 ### Fixed (documentation only, no server change)
 
 - The down-payment figures were described against the wrong basis.

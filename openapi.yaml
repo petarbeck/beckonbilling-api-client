@@ -755,6 +755,16 @@ paths:
         payment and a final invoice add up.
 
 
+        **The new invoice is seeded from a TEMPLATE, not from the quote.** Its
+        `terms_text`, `payment_terms_text`, `due_date` and default attachments
+        come from the customer's own settings, else the customer's template,
+        else the organisation's default invoice template - the same chain a
+        hand-made invoice resolves. The quote's own terms never travel: they say
+        different things on the two documents, and the quote wording holds
+        `{valid_until}`, which an invoice cannot resolve. Note `due_date` is
+        therefore a date on a freshly converted invoice; it used to be `null`.
+
+
         Refusals worth handling, all by `error.key`: `invoice_scope_unknown`
         (422, a `scope` outside the three values); `customer_required` (409);
         `quote_has_no_positions` (409); `quote_is_recurring_only` (409);

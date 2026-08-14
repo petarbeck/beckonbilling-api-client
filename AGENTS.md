@@ -533,8 +533,13 @@ $client->recurringInvoices->create([
     **only when the quote carries a real down payment** - `deposit_type` set AND
     `deposit_value` above zero. At `percent` / `0` no deposit line appears in the
     summary either, so the paragraph would describe something invisible.
-  - Converting a quote does NOT carry `payment_terms_text` onto the invoice: it
-    means deposit terms on the one and payment terms on the other.
+  - Converting a quote carries NEITHER text from the quote - on the quote they
+    are quote and deposit terms, on the invoice invoice and payment terms, and
+    the quote wording even holds `{valid_until}`, a macro an invoice does not
+    resolve. The new invoice is seeded from a template instead: the customer's
+    own terms and days, else their template, else the organisation's default
+    invoice template. Its `due_date` and its default attachments come from there
+    too.
   - On a QUOTE, omit `valid_until` on create to let the template supply the
     window.
   - On an INVOICE there is no `due_date` input at all - it is read-only. The key
