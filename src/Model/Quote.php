@@ -31,10 +31,16 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
  *                                             An exempt document shows a single total and this note
  *                                             INSTEAD of a net/VAT breakdown.
- * @property-read string|null $deposit_type    "none" | "percent" | "amount".
- * @property-read float|null  $deposit_value   Percent 0-100 for "percent", else a EUR amount.
- * @property-read float|null  $deposit_amount  Resolved down payment, capped to [0, gross_total].
- * @property-read float|null  $remaining_amount gross_total minus deposit_amount.
+ * @property-read string|null $deposit_type    "none" | "percent" | "amount" | "goods_percent" | "service_percent".
+ *                                             The last two apply the percentage to only the goods or only the
+ *                                             service lines, decided per line by its supply_type.
+ * @property-read float|null  $deposit_value   A percent 0-100 for "percent", "goods_percent" and
+ *                                             "service_percent"; a EUR amount for "amount".
+ * @property-read float|null  $deposit_amount  Resolved down payment, capped to [0, basis] - the basis being the
+ *                                             ONE-TIME gross total, or only its goods/service part for the two
+ *                                             supply-specific types. Never capped to gross_total, which carries
+ *                                             recurring lines a down payment never covers.
+ * @property-read float|null  $remaining_amount The one-time gross total minus deposit_amount.
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total
  * @property-read float|null  $gross_total

@@ -1811,10 +1811,34 @@ components:
             country (AT, DE, CH, plus a neutral fallback) and follows the
             organisation's language, so print it as given rather than deriving
             your own.
-        deposit_type: { type: string, enum: [none, percent, amount], default: none }
-        deposit_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
-        deposit_amount: { type: number, description: "Resolved down payment, capped to [0, gross_total]." }
-        remaining_amount: { type: number, description: gross_total minus deposit_amount. }
+        deposit_type:
+          type: string
+          enum: [none, percent, amount, goods_percent, service_percent]
+          default: none
+          description: >-
+            Down payment (Anzahlung). `percent` and `amount` apply to the whole
+            ONE-TIME portion of the quote; `goods_percent` and `service_percent`
+            apply a percentage to only the goods or only the service lines,
+            decided per line by its `supply_type` (a line that states none counts
+            as a service). Recurring lines are never part of a down payment, and
+            the computed amount is capped by whichever basis applies.
+        deposit_value:
+          type: number
+          description: >-
+            A percent 0-100 for `percent`, `goods_percent` and `service_percent`;
+            a EUR amount for `amount`.
+        deposit_amount:
+          type: number
+          description: >-
+            Resolved down payment, capped to [0, basis] - the basis being the
+            one-time gross total, or only its goods or service part for the two
+            supply-specific types. It is NOT capped to `gross_total`, which
+            includes recurring lines a down payment never covers.
+        remaining_amount:
+          type: number
+          description: >-
+            The one-time gross total minus `deposit_amount` - not `gross_total`
+            minus it, since recurring lines sit outside the down payment.
         net_total: { type: number }
         tax_total: { type: number }
         gross_total: { type: number }
@@ -1913,8 +1937,15 @@ components:
           items: { $ref: "#/components/schemas/ReferenceField" }
           description: Legacy alias of `reference_fields`. Sending both, this one wins.
         reverse_charge: { type: boolean }
-        deposit_type: { type: string, enum: [none, percent, amount] }
-        deposit_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
+        deposit_type:
+          type: string
+          enum: [none, percent, amount, goods_percent, service_percent]
+          description: See `Quote.deposit_type`.
+        deposit_value:
+          type: number
+          description: >-
+            A percent 0-100 for `percent`, `goods_percent` and `service_percent`;
+            a EUR amount for `amount`.
         valid_until:
           type: string
           format: date
