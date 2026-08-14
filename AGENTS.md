@@ -116,7 +116,7 @@ Resource properties and their models:
 ->issue(string $id, array $options = []): Quote            // assign number
 ->send(string $id, array $data = [], array $options = []): Quote   // email PDF; needs `send`; $data may hold 'document_ids'
 ->sendResult(string $id, array $data = [], array $options = []): array // ['sent_to','quote','detached_positions']
-->convert(string $id, array $options = []): array          // ['outbound_invoice_id'=>?string,'quote'=>?Quote]; needs outbound_invoices Full
+->convert(string $id, ?string $scope = null, array $options = []): array // ['outbound_invoice_id'=>?string,'quote'=>?Quote]; needs outbound_invoices Full
 ->pdf(string $id, array $options = []): string             // raw PDF bytes (409 for drafts)
 ```
 
@@ -457,6 +457,22 @@ $client->recurringInvoices->create([
   interval - but `POST /quotes/{id}/convert` creates only the invoice, so an
   all-recurring quote is refused with 409 `quote_is_recurring_only`.
 - `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
+- **A quote can be billed in STAGES**, and the money only adds up if you know
+  how. `convert()` takes a `$scope`: `null`/`'full'` bills the whole one-time
+  part as it always did, `'deposit'` bills the quote's down payment, `'final'`
+  bills the remainder. An unknown value is 422 `invoice_scope_unknown` - refused,
+  not coerced, because falling back to `full` would silently bill everything.
+  - Each invoice reports which part it is in **`invoice_scope`**
+    (`full` | `deposit` | `final`). Everything not created as a staged invoice
+    says `full`, including every invoice older than the field.
+  - **Do not add a deposit and a final invoice together as if each were the
+    whole amount.** They already sum: the final invoice lists the full one-time
+    lines and then carries a NEGATIVE deduction line per tax rate for what the
+    down payment covered, so its own `gross_total` is the remainder. Those
+    negative lines are correct - do not filter them out.
+  - **`OutboundInvoice.quote_id`** is the full trail back to the quote. Use it,
+    not `Quote.converted_outbound_invoice_id`, which holds a single id and so
+    cannot describe a quote billed as two invoices.
 - `structured_totals` is **gone**; sending it does nothing.
 - **`document_term_id` was RETIRED**: sending it - with any value at all -
   answers 422 `document_term_id_retired`. Its successor is

@@ -8,6 +8,15 @@ namespace BeckonBilling\ApiClient\Model;
  * An outbound invoice / Ausgangsrechnung (`/api/v1/outbound-invoices`).
  *
  * @property-read string      $id
+ * @property-read string|null $invoice_scope   "full" | "deposit" | "final" - which PART of its quote this bills.
+ *                                             "full" for everything not created as a staged invoice, including
+ *                                             every invoice older than the field. A deposit and a final invoice
+ *                                             already SUM correctly: the final one lists the full lines and
+ *                                             carries a negative deduction line per tax rate, so its gross is
+ *                                             the remainder. Never add the two as if each were the whole amount.
+ * @property-read string|null $quote_id        The quote this invoice came from, or null. The FULL trail - one
+ *                                             quote may produce several invoices, which
+ *                                             Quote::$converted_outbound_invoice_id cannot express.
  * @property-read string|null $created_by      Uuid of the user who created this record; null = system-generated (e.g. a recurring run).
  * @property-read string|null $created_by_name Display name of the creator; '' when created_by is null.
  * @property-read string|null $public_index      Document number (opaque).

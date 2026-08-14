@@ -747,9 +747,48 @@ paths:
         invoice to create and is refused with 409 `quote_is_recurring_only` - it
         converts to a recurring invoice, which this v1 action does not create.
         Use the portal for a mixed or recurring-only quote.
+
+
+        **`scope` decides WHICH invoice this creates** - the whole thing, a down
+        payment, or the remainder. Omitting it keeps the behaviour this action
+        has always had. See `OutboundInvoice.invoice_scope` for how a down
+        payment and a final invoice add up.
+
+
+        Refusals worth handling, all by `error.key`: `invoice_scope_unknown`
+        (422, a `scope` outside the three values); `customer_required` (409);
+        `quote_has_no_positions` (409); `quote_is_recurring_only` (409);
+        `quote_already_invoiced` (409); and, for the two staged scopes,
+        `quote_has_no_deposit` (422, `scope=deposit` on a quote carrying none),
+        `quote_deposit_base_empty` (422), `deposit_invoice_exists` (409),
+        `quote_has_deposit_invoice` (409, `scope=full` once a down payment
+        exists - the rest belongs on a final invoice), `no_deposit_invoice`
+        (409, `scope=final` with no ISSUED down payment to deduct),
+        `quote_has_draft_invoice` (409, issue or delete it first) and
+        `final_invoice_exists` (409).
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  enum: [full, deposit, final]
+                  default: full
+                  description: >-
+                    Which invoice to create. `full` bills the whole one-time
+                    part, as this action always did - omitting `scope`, or
+                    sending null or an empty string, means exactly that.
+                    `deposit` bills only the quote's down payment; `final` bills
+                    the remainder, deducting an already-issued down payment.
+                    Anything else is 422 `invoice_scope_unknown` - it is refused
+                    rather than coerced, because falling back to `full` would
+                    silently bill the entire amount.
       responses:
         "201":
           description: The new invoice id + the (converted) quote.
@@ -760,6 +799,8 @@ paths:
                 properties:
                   outbound_invoice_id: { type: string }
                   quote: { $ref: "#/components/schemas/Quote" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 
   /quotes/{id}/pdf:
     get:
@@ -1929,7 +1970,11 @@ components:
           type: string
           nullable: true
           readOnly: true
-          description: The invoice this quote was converted into, once it was.
+          description: >-
+            The invoice this quote was converted into, once it was. **It is
+            single-valued**, so it cannot describe a quote billed in stages: a
+            down payment and a final invoice are two invoices. Read
+            `OutboundInvoice.quote_id` to find all of them.
         converted_recurring_invoice_id:
           type: string
           nullable: true
@@ -2119,6 +2164,40 @@ components:
             Kept when the mode is anything else, so a record returns to these
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
+        invoice_scope:
+          type: string
+          enum: [full, deposit, final]
+          readOnly: true
+          default: full
+          description: >-
+            Which PART of its quote this invoice bills. `full` is the whole
+            thing and is what every invoice not created as a staged one reports,
+            including every invoice that existed before this field did.
+            `deposit` is a down payment; `final` is the remainder after one.
+
+
+            **Do not add a deposit and a final invoice together as if each were
+            the whole amount.** They already sum correctly: the final invoice
+            lists the full one-time lines and then carries a NEGATIVE deduction
+            line per tax rate for what the down payment already covered, so its
+            own `gross_total` is the remainder, and deposit gross + final gross
+            equals the quote's one-time gross. The deduction is visible in
+            `positions` as a line with a negative `price` - do not filter those
+            out as if they were an error.
+
+
+            Set by `POST /quotes/{id}/convert` via its `scope`; it is not a body
+            key on this endpoint.
+        quote_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: >-
+            The quote this invoice was created from, or null. This is the FULL
+            trail: one quote may produce several invoices (a down payment and a
+            final one), which is exactly what `Quote.converted_outbound_invoice_id`
+            cannot express, holding only one. To find every invoice belonging to
+            a quote, match on this field rather than reading that one.
         id: { type: string }
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated (e.g. a recurring run or a dunning fee invoice)." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }

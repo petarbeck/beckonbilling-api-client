@@ -90,11 +90,27 @@ final class Quotes extends AbstractResource
      * as an alias so nothing that read it breaks, but it now carries the real
      * value; prefer `outbound_invoice_id`.
      *
+     * **`$scope` decides WHICH invoice this creates**: `null` (or `'full'`)
+     * bills the whole one-time part, as this method always did; `'deposit'`
+     * bills only the quote's down payment; `'final'` bills the remainder,
+     * deducting an already-issued down payment. Anything else is refused by the
+     * server with 422 `invoice_scope_unknown` rather than coerced - falling back
+     * to the full amount would silently bill everything.
+     *
+     * The scope is a string parameter rather than an options/data array on
+     * purpose: a call that used to read `convert($id, ['organisation' => ...])`
+     * fails LOUDLY with a TypeError instead of quietly posting the options as a
+     * body and losing the organisation scope. Pass options third.
+     *
      * @param array<string,mixed> $options
      * @return array{outbound_invoice_id: ?string, invoice_id: ?string, quote: ?Quote}
      */
-    public function convert(string $id, array $options = []): array
+    public function convert(string $id, ?string $scope = null, array $options = []): array
     {
+        if (null !== $scope) {
+            $options['json'] = ['scope' => $scope];
+        }
+
         $response = $this->transport->request('POST', $this->itemPath($id) . '/convert', $options);
         $quote = is_array($response['quote'] ?? null) ? new Quote($response['quote']) : null;
 

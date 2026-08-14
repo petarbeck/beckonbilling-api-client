@@ -123,6 +123,26 @@ final class ResourceTest extends ClientTestCase
     }
 
     /**
+     * A staged conversion has to reach the wire as `scope`, and the default has
+     * to stay "no body at all" - a quote converted without a scope must keep
+     * billing the whole amount exactly as before.
+     */
+    public function testConvertSendsTheScopeAndOmitsItByDefault(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(201, ['outbound_invoice_id' => 'inv1', 'quote' => ['id' => 'q1']])
+            ->push(201, ['outbound_invoice_id' => 'inv2', 'quote' => ['id' => 'q1']]);
+
+        $client = $this->makeClient($http);
+
+        $client->quotes->convert('q1');
+        $this->assertSame([], $this->bodyOf($http->requests[0]), 'no scope must post no body');
+
+        $client->quotes->convert('q1', 'deposit');
+        $this->assertSame(['scope' => 'deposit'], $this->bodyOf($http->requests[1]));
+    }
+
+    /**
      * Quote send is the one action whose body is an envelope, not a bare quote.
      * Hydrating the envelope as the Quote made every field null and buried the
      * real one at ->quote.

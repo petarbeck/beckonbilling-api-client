@@ -50,7 +50,9 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read float|null  $net_total
  * @property-read float|null  $tax_total
  * @property-read float|null  $gross_total
- * @property-read string|null $converted_outbound_invoice_id  Set once the quote was converted.
+ * @property-read string|null $converted_outbound_invoice_id  Set once the quote was converted. SINGLE-valued, so
+ *                                             it cannot describe a quote billed in stages - read
+ *                                             OutboundInvoice::$quote_id to find every invoice of a quote.
  * @property-read string|null $converted_recurring_invoice_id Set when its recurring half produced a template.
  * @property-read string|null $accepted_at     ISO datetime; set when the customer accepted it online.
  * @property-read bool|null   $has_signature   Whether that acceptance carries a drawn signature.
