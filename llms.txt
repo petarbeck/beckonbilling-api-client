@@ -4,13 +4,13 @@
 > for the Beckon Billing REST API v1. A thin, typed PSR-18 wrapper over eight
 > entities - six writable (customers, article categories, articles, quotes,
 > outbound invoices, recurring invoices) and two read-only (units, document
-> terms) - plus user-token auth. PHP >=8.2, PSR-4, MIT.
+> templates) - plus user-token auth. PHP >=8.2, PSR-4, MIT.
 
 Key facts for an assistant:
 - Construct: `new BeckonBilling\ApiClient\Client(['token' => 'bbp_...', 'base_uri' => 'https://portal.beckonbilling.com', 'organisation' => 'uuid'])`.
-- Entities via properties: `$client->customers`, `->articleCategories`, `->articles`, `->units`, `->documentTerms`, `->quotes`, `->outboundInvoices`, `->recurringInvoices`, `->auth`.
+- Entities via properties: `$client->customers`, `->articleCategories`, `->articles`, `->units`, `->documentTemplates`, `->quotes`, `->outboundInvoices`, `->recurringInvoices`, `->auth`.
 - CRUD: `list()`, `autoPaging()`, `get()`, `create()`, `update()`, `delete()`. Lists return a `Collection` (`data`/`total`/`limit`/`offset`). Creating answers 201.
-- `units` and `documentTerms` are read-only (list/get); writing to them throws `\LogicException`.
+- `units` and `documentTemplates` are read-only (list/get); writing to them throws `\LogicException`.
 - Actions: quotes `issue/send/sendResult/convert/pdf`; invoices `issue/send/cancel/setPaid/pdf`. Articles also carry variants: `variants/createVariant/updateVariant`.
 - Errors: typed subclasses of `ApiException`; branch on `getErrorKey()`. Capabilities `send`/`bank` gate email/money actions.
 - Traps worth knowing: a position's `unit` is adopted into the vocabulary if unknown and reads back in the vocabulary's spelling; `due_days` (not `due_date`) sets an invoice's payment term; `issue()` reports `send_error` and `payment_link_error` on a 200; `cancel()` returns the credit note.

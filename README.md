@@ -7,7 +7,7 @@
 The official PHP client for the [Beckon Billing](https://www.beckonbilling.com)
 REST API (v1) - a small, typed, idiomatic wrapper over the public
 `/api/v1` surface: customers, article categories, articles, quotes, outbound
-invoices and recurring invoices, the read-only units and document-terms
+invoices and recurring invoices, the read-only units and document-templates
 vocabularies, plus user-token authentication.
 
 - **PSR-4 / PHP `>=8.2`**, no framework required.
@@ -120,7 +120,7 @@ A user token with exactly one organisation may omit it entirely.
 | `$client->articleCategories` | Article categories | `articles` |
 | `$client->articles` | Articles | `articles` |
 | `$client->units` | Units (read-only) | any document feature |
-| `$client->documentTerms` | Terms presets (read-only) | `quotes` / `outbound_invoices` |
+| `$client->documentTemplates` | Document templates (read-only) | `quotes` / `outbound_invoices` |
 | `$client->quotes` | Quotes | `quotes` |
 | `$client->outboundInvoices` | Outbound invoices | `outbound_invoices` |
 | `$client->recurringInvoices` | Recurring invoices | `recurring_invoices` |
@@ -129,7 +129,7 @@ A user token with exactly one organisation may omit it entirely.
 Each writable resource offers `list()`, `autoPaging()`, `get()`, `create()`,
 `update()`, `delete()`. Quotes and invoices add lifecycle actions
 (`issue`, `send`, `convert`/`cancel`, `setPaid`, `pdf`); articles add variants.
-`units` and `documentTerms` are read-only - `list()`, `autoPaging()`, `get()`.
+`units` and `documentTemplates` are read-only - `list()`, `autoPaging()`, `get()`.
 
 ## Pagination
 

@@ -11,7 +11,7 @@ A thin, typed PHP wrapper over the Beckon Billing public REST API (`/api/v1`).
 Namespace `BeckonBilling\ApiClient\`, PHP `>=8.2`, PSR-4, PSR-18/PSR-17 for
 transport. It exposes eight entities - six writable (customers, article
 categories, articles, quotes, outbound invoices, recurring invoices) and two
-read-only (units, document terms) - plus user-token auth. It holds no secrets; a
+read-only (units, document templates) - plus user-token auth. It holds no secrets; a
 valid API token is required to do anything.
 
 ## Install
@@ -93,7 +93,7 @@ $res->update(string $id, array $data, array $options = []): Model  // partial (P
 $res->delete(string $id, array $options = []): void                // soft-delete
 ```
 
-`units` and `documentTerms` are **read-only**: `list()`, `autoPaging()` and
+`units` and `documentTemplates` are **read-only**: `list()`, `autoPaging()` and
 `get()` only. `create`/`update`/`delete` throw a `\LogicException` locally
 rather than making a request the API answers 405.
 
@@ -105,7 +105,7 @@ Resource properties and their models:
 | `$client->articleCategories` | `article-categories` | `Model\ArticleCategory` | `articles` |
 | `$client->articles` | `articles` | `Model\Article` | `articles` |
 | `$client->units` | `units` | `Model\Unit` | any of `articles`/`quotes`/`outbound_invoices`/`recurring_invoices` |
-| `$client->documentTerms` | `document-terms` | `Model\DocumentTerm` | `quotes` or `outbound_invoices` |
+| `$client->documentTemplates` | `document-templates` | `Model\DocumentTemplate` | `quotes` or `outbound_invoices` |
 | `$client->quotes` | `quotes` | `Model\Quote` | `quotes` |
 | `$client->outboundInvoices` | `outbound-invoices` | `Model\OutboundInvoice` | `outbound_invoices` |
 | `$client->recurringInvoices` | `recurring-invoices` | `Model\RecurringInvoice` | `recurring_invoices` |
@@ -258,25 +258,42 @@ Readable by any token with View on any one of `articles`, `quotes`,
 `outbound_invoices` or `recurring_invoices` - a token allowed to write a
 document must be able to read what its documents are checked against.
 
-### Document terms (`$client->documentTerms`) - read-only
+### Document templates (`$client->documentTemplates`) - read-only
 
-Terms presets ("Bedingungen"), and where the ids for the write-only
-`document_term_id` input come from:
+Document templates ("Vorlagen"), and where the ids for the write-only
+`document_template_id` input come from:
 
 ```php
-$presets = $client->documentTerms->list(['kind' => 'outbound_invoice']);
+$templates = $client->documentTemplates->list(['kind' => 'invoice']);
 $client->outboundInvoices->create([
-    'customer_id'      => $customerId,
-    'document_term_id' => $presets->data[0]->id,   // loads its text AND its days
-    'positions'        => [ /* ... */ ],
+    'customer_id'          => $customerId,
+    'document_template_id' => $templates->data[0]->id,  // loads BOTH texts AND its days
+    'positions'            => [ /* ... */ ],
 ]);
 ```
 
-`days` is the payment term (or validity) the preset applies - and `0` is a real
-value meaning due immediately, so never fold it into a fallback. Rows are
-filtered to the kinds the token may view: a quotes-only token never sees the
-invoice presets, and asking for a kind it cannot view answers an EMPTY LIST
-rather than 403 (which would leak that the other kind exists).
+**This replaced `documentTerms` / `/document-terms`, which was removed** - the
+old path now 404s, and the old input key `document_term_id` answers 422
+`document_term_id_retired`. A template is the bigger thing a terms preset was a
+part of: besides the wording and the days it carries the SECOND terms text
+(`payment_terms_text`), the printed footer, the cover-mail text, the attachments
+a new document starts with, and - per kind - the quote's default down payment or
+the invoice's bank details. The organisation's DEFAULT template is now its
+document setting, which is why those fields left the organisation.
+
+Two things to get right:
+
+- **The kind is `invoice`, not `outbound_invoice`.** The kinds differ from the
+  removed document terms, so a value copied out of older code is simply unknown.
+  A template of the wrong kind is refused with 404
+  `document_template_not_found` - the same answer as an unknown or foreign id.
+- **`days` is the payment term (or validity) the template applies**, and `0` is
+  a real value meaning due immediately, so never fold it into a fallback. With
+  no template at all the fallback is 30 days for a quote, 14 for an invoice.
+
+Rows are filtered to the kinds the token may view: a quotes-only token never
+sees the invoice templates, and asking for a kind it cannot view answers an
+EMPTY LIST rather than 403 (which would leak that the other kind exists).
 
 ### Strict mode (`?strict=1`)
 
@@ -424,8 +441,8 @@ $client->recurringInvoices->create([
   v1.4.x** - and worse, its mere presence disabled the preset branch too, so a
   request carrying it moved nothing at all. If you have been sending it as a
   no-op, it now takes effect.
-  An explicit `due_days` beats the day count of a `document_term_id` sent in the
-  same request.
+  An explicit `due_days` beats the day count of a `document_template_id` sent in
+  the same request.
 - `RecurringInvoice.last_run_error` comes with **`last_run_severity`**
   (`''` | `warning` | `error`). Read it before calling a run failed: some
   messages describe a run that DID generate, export and send the invoice.
@@ -441,9 +458,14 @@ $client->recurringInvoices->create([
   all-recurring quote is refused with 409 `quote_is_recurring_only`.
 - `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
 - `structured_totals` is **gone**; sending it does nothing.
-- **`document_term_id` is write-only.** Sending it loads that preset's text and
-  days onto the document; it is not returned, because nothing records which
-  preset was used. Read `terms_text` - that is what renders.
+- **`document_term_id` was RETIRED**: sending it - with any value at all -
+  answers 422 `document_term_id_retired`. Its successor is
+  **`document_template_id`**, which is likewise write-only: it loads that
+  template's texts and days onto the document and is not returned, because
+  nothing records which template was used. Read `terms_text` and
+  `payment_terms_text` - those are what render. Being refused rather than
+  ignored is deliberate: ignoring it would leave the document on the default
+  template and silently move `valid_until` / `due_date`.
 - A **customer** carries default Bedingungen per document kind
   (`quote_document_term_id` / `quote_terms_text`,
   `invoice_document_term_id` / `invoice_terms_text`). Assigning that customer to
@@ -476,8 +498,8 @@ $client->recurringInvoices->create([
     window.
   - On an INVOICE there is no `due_date` input at all - it is read-only. The key
     that moves the date is **`due_days`** (see below).
-  - `document_term_id` is write-only: it LOADS a preset's text and days. Browse
-    the presets with `$client->documentTerms->list(['kind' => 'quote'])`.
+  - `document_template_id` is write-only: it LOADS a template's texts and days.
+    Browse them with `$client->documentTemplates->list(['kind' => 'quote'])`.
 - Quotes support a down payment: `deposit_type`/`deposit_value` in, resolved
   `deposit_amount` + `remaining_amount` out.
 - Quotes and invoices carry `small_business` (the issuer's Kleinunternehmer VAT

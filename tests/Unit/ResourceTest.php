@@ -7,7 +7,7 @@ namespace BeckonBilling\ApiClient\Tests\Unit;
 use BeckonBilling\ApiClient\Collection;
 use BeckonBilling\ApiClient\Model\ArticleVariant;
 use BeckonBilling\ApiClient\Model\Customer;
-use BeckonBilling\ApiClient\Model\DocumentTerm;
+use BeckonBilling\ApiClient\Model\DocumentTemplate;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
 use BeckonBilling\ApiClient\Model\Quote;
 use BeckonBilling\ApiClient\Model\Unit;
@@ -172,7 +172,7 @@ final class ResourceTest extends ClientTestCase
         $this->assertSame('Stripe key rejected.', $issued->payment_link_error);
     }
 
-    public function testUnitsAndDocumentTermsAreReadable(): void
+    public function testUnitsAndDocumentTemplatesAreReadable(): void
     {
         $http = (new MockHttpClient())
             ->push(200, [
@@ -184,7 +184,7 @@ final class ResourceTest extends ClientTestCase
             ])
             ->push(200, ['id' => 'u2', 'short' => 'Monat', 'plural' => 'Monate'])
             ->push(200, [
-                'data' => [['id' => 't1', 'kind' => 'outbound_invoice', 'days' => 0, 'is_default' => true]],
+                'data' => [['id' => 't1', 'kind' => 'invoice', 'days' => 0, 'is_default' => true]],
                 'total' => 1, 'limit' => 100, 'offset' => 0,
             ]);
 
@@ -199,11 +199,16 @@ final class ResourceTest extends ClientTestCase
 
         $this->assertInstanceOf(Unit::class, $client->units->get('u2'));
 
-        $terms = $client->documentTerms->list(['kind' => 'outbound_invoice']);
-        $this->assertContainsOnlyInstancesOf(DocumentTerm::class, iterator_to_array($terms));
-        $this->assertSame('outbound_invoice', $this->queryOf($http->requests[2])['kind']);
+        // The kind is `invoice`, not the `outbound_invoice` /document-terms used.
+        $templates = $client->documentTemplates->list(['kind' => 'invoice']);
+        $this->assertContainsOnlyInstancesOf(DocumentTemplate::class, iterator_to_array($templates));
+        $this->assertStringEndsWith(
+            '/document-templates',
+            explode('?', (string) $http->requests[2]->getUri())[0]
+        );
+        $this->assertSame('invoice', $this->queryOf($http->requests[2])['kind']);
         // 0 days is a real term ("due immediately"), never "unset".
-        $this->assertSame(0, iterator_to_array($terms)[0]->days);
+        $this->assertSame(0, iterator_to_array($templates)[0]->days);
     }
 
     /**
@@ -218,9 +223,9 @@ final class ResourceTest extends ClientTestCase
             fn () => $client->units->create(['short' => 'kg']),
             fn () => $client->units->update('u1', ['short' => 'kg']),
             fn () => $client->units->delete('u1'),
-            fn () => $client->documentTerms->create(['label' => 'x']),
-            fn () => $client->documentTerms->update('t1', ['label' => 'x']),
-            fn () => $client->documentTerms->delete('t1'),
+            fn () => $client->documentTemplates->create(['label' => 'x']),
+            fn () => $client->documentTemplates->update('t1', ['label' => 'x']),
+            fn () => $client->documentTemplates->delete('t1'),
         ] as $write) {
             try {
                 $write();

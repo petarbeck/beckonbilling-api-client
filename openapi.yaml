@@ -40,13 +40,18 @@ info:
     A missing capability returns 403 with `error.key` `send_not_permitted` /
     `bank_not_permitted`.
 
-    Two collections are **read-only** here - `units` and `document-terms`. They
-    are the organisation's vocabulary, which a caller must be able to READ to
-    build a valid document; managing them stays a portal action, and every
+    Two collections are **read-only** here - `units` and `document-templates`.
+    They are the organisation's vocabulary, which a caller must be able to READ
+    to build a valid document; managing them stays a portal action, and every
     method but `GET` answers 405. `units` is readable with View on any one of
     `articles`, `quotes`, `outbound_invoices` or `recurring_invoices`;
-    `document-terms` with View on `quotes` or `outbound_invoices`, and its rows
-    are filtered to the kinds that token may actually view.
+    `document-templates` with View on `quotes` or `outbound_invoices`, and its
+    rows are filtered to the kinds that token may actually view.
+
+
+    **`/document-terms` was REMOVED** and now answers 404;
+    `/document-templates` replaced it, and the input key `document_term_id`
+    answers 422 `document_term_id_retired` in favour of `document_template_id`.
 
     ## Conventions
 
@@ -122,8 +127,8 @@ tags:
   - name: Articles
   - name: Units
     description: The organisation's unit vocabulary. Read-only.
-  - name: Document terms
-    description: Terms presets ("Bedingungen"). Read-only.
+  - name: Document templates
+    description: Document templates ("Vorlagen"). Read-only. Replaced "Document terms".
   - name: Quotes
   - name: Outbound invoices
   - name: Recurring invoices
@@ -527,18 +532,27 @@ paths:
               schema: { $ref: "#/components/schemas/Unit" }
         "404": { $ref: "#/components/responses/Error" }
 
-  /document-terms:
+  /document-templates:
     get:
-      tags: [Document terms]
-      summary: List terms presets ("Bedingungen")
+      tags: [Document templates]
+      summary: List document templates ("Vorlagen")
       description: >-
-        Where the ids for the write-only `document_term_id` input come from,
-        together with the text and day count each one would apply.
+        Where the ids for the write-only `document_template_id` input come from,
+        together with the two terms texts and the day count each one would apply.
+
+
+        This replaced `/document-terms`, which was removed. A template is the
+        bigger thing a terms preset used to be a part of: besides the wording and
+        the days it also carries the printed footer, the cover-mail text, the
+        attachments a new document starts with, and - per kind - the quote's
+        default down payment or the invoice's bank details. **The organisation's
+        default template IS its document setting**, which is why those fields
+        moved off the organisation and onto this record.
 
 
         Readable with View on `quotes` or `outbound_invoices`, and the ROWS are
         filtered to the kinds this token may actually view - a quotes-only token
-        never receives the invoice presets. Asking for a `kind` it cannot view
+        never receives the invoice templates. Asking for a `kind` it cannot view
         answers an EMPTY LIST rather than 403, which would leak that the other
         kind exists.
       parameters:
@@ -546,16 +560,18 @@ paths:
         - name: kind
           in: query
           required: false
-          description: Restrict to one document type.
-          schema: { type: string, enum: [quote, outbound_invoice] }
+          description: >-
+            Restrict to one document type. Note the value is `invoice`, NOT
+            `outbound_invoice` - the kind `/document-terms` used.
+          schema: { type: string, enum: [quote, invoice] }
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/offset"
       responses:
         "200":
-          description: A page of presets.
+          description: A page of templates.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/DocumentTermList" }
+              schema: { $ref: "#/components/schemas/DocumentTemplateList" }
         "403": { $ref: "#/components/responses/Error" }
         "405":
           description: Read-only - every method but GET is refused.
@@ -563,22 +579,22 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
-  /document-terms/{id}:
+  /document-templates/{id}:
     get:
-      tags: [Document terms]
-      summary: Read one terms preset
+      tags: [Document templates]
+      summary: Read one document template
       description: >-
-        A preset of a kind this token may not view answers the same 404
-        `term_not_found` as an unknown or foreign id.
+        A template of a kind this token may not view answers the same 404
+        `document_template_not_found` as an unknown or foreign id.
       parameters:
         - $ref: "#/components/parameters/id"
         - $ref: "#/components/parameters/organisation"
       responses:
         "200":
-          description: The preset.
+          description: The template.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/DocumentTerm" }
+              schema: { $ref: "#/components/schemas/DocumentTemplate" }
         "404": { $ref: "#/components/responses/Error" }
 
   /quotes:
@@ -1271,45 +1287,96 @@ components:
               type: array
               items: { $ref: "#/components/schemas/Unit" }
 
-    DocumentTerm:
+    DocumentTemplate:
       type: object
       additionalProperties: true
       description: >-
-        A terms preset ("Bedingungen"). Read-only here, and where the ids for the
-        write-only `document_term_id` input come from. Sending that id LOADS this
-        preset's text and days onto a document, which then owns its own snapshot -
-        editing or deleting the preset never changes a document that exists.
+        A document template ("Vorlage"). Read-only here, and where the ids for
+        the write-only `document_template_id` input come from. Sending that id
+        LOADS this template's two terms texts and its days onto a document, which
+        then owns its own snapshot - editing or deleting the template never
+        changes a document that already exists.
+
+
+        Replaced `DocumentTerm` (see `GET /document-templates`).
       properties:
         id: { type: string }
         kind:
           type: string
-          enum: [quote, outbound_invoice]
+          enum: [quote, invoice]
           description: >-
-            Which document type this preset belongs to. Naming a preset of the
-            wrong kind on a document is refused with 404 `term_not_found`.
-        label: { type: string, description: What this preset is called in the portal. }
+            Which document type this template belongs to. **`invoice`, not
+            `outbound_invoice`** - the kinds differ from the removed
+            `/document-terms`, so a value copied from older code is unknown.
+            Naming a template of the wrong kind on a document is refused with 404
+            `document_template_not_found`.
+        label: { type: string, description: What this template is called in the portal. }
+        is_default:
+          type: boolean
+          description: >-
+            Whether a new document of this kind starts from this template. At
+            most one per organisation and kind - and since the last template of a
+            kind cannot be deleted, a default always exists.
+        terms_text:
+          type: string
+          description: >-
+            The document's own terms, snapshotted onto it as `terms_text`. The
+            portal labels this "Angebotsbedingungen" on a quote and
+            "Rechnungsbedingungen" on an invoice.
+        payment_terms_text:
+          type: string
+          description: >-
+            The payment terms, snapshotted onto the document as
+            `payment_terms_text` and printed AFTER `terms_text`. Labelled
+            "Anzahlungsbedingungen" on a quote and "Zahlungsbedingungen" on an
+            invoice.
         days:
           type: integer
           description: >-
             Validity (quote) or payment term (invoice) in days. **0 is a real
-            value** meaning due immediately. Applying the preset moves the
+            value** meaning due immediately. Applying the template moves the
             document's `valid_until` / `due_date` by this many days from its
-            issue date.
-        text: { type: string, description: The wording snapshotted onto the document as `terms_text`. }
-        is_default:
+            issue date. With no template at all the fallback is 30 days for a
+            quote and 14 for an invoice.
+        footer: { type: string, description: The footer printed on documents started from this template. }
+        email_body: { type: string, description: The cover-mail text those documents are sent with. }
+        document_ids:
+          type: array
+          items: { type: string }
+          description: >-
+            Uuids of the documents a new document of this kind starts with
+            attached. Carried at CREATION only - naming a template on an existing
+            document loads its texts and days, never its attachments.
+        deposit_type:
+          type: string
+          enum: [none, percent, amount, goods_percent, service_percent]
+          description: The down payment a new QUOTE starts with. Meaningless on an invoice template.
+        deposit_value: { type: number, description: See `Quote.deposit_value`. }
+        bank_mode:
+          type: string
+          description: >-
+            How the bank details print on an INVOICE from this template.
+            Meaningless on a quote template - a quote no longer carries bank
+            details at all; a down payment invoice is what asks for money now.
+        bank_text: { type: string, description: Free-text bank details, used when `bank_mode` says so. }
+        bank_account_id:
+          type: string
+          description: Uuid of the bank account those invoices print. Empty when none is designated.
+        can_delete:
           type: boolean
           description: >-
-            Whether a new document of this kind starts from this preset. At most
-            one per organisation and kind.
+            False for the last template of its kind, which cannot be deleted -
+            every document resolution needs one to fall back to.
+        created_at: { type: string, format: date-time, nullable: true }
 
-    DocumentTermList:
+    DocumentTemplateList:
       allOf:
         - $ref: "#/components/schemas/Pagination"
         - type: object
           properties:
             data:
               type: array
-              items: { $ref: "#/components/schemas/DocumentTerm" }
+              items: { $ref: "#/components/schemas/DocumentTemplate" }
 
     Customer:
       type: object
@@ -1864,6 +1931,13 @@ components:
     QuoteInput:
       type: object
       additionalProperties: true
+      description: >-
+        **`document_term_id` was RETIRED.** Sending that key - with any value,
+        including null or an empty string - answers 422
+        `document_term_id_retired`. Use `document_template_id`. It is refused
+        rather than ignored on purpose: ignoring it would leave the document on
+        the default template and silently move `valid_until`, so a caller who
+        thought they had chosen a preset would get a different date.
       properties:
         recipient_kind:
           type: string
@@ -1881,22 +1955,32 @@ components:
             Uuid of the lead, supplier or partner named by `recipient_kind`.
             Unknown and foreign uuids answer identically with 404
             `recipient_not_found`.
-        document_term_id:
+        document_template_id:
           type: string
           writeOnly: true
           description: >-
-            LOAD a Bedingungen preset: its text and day count are copied onto the
-            document, which then owns its own snapshot. Write-only on purpose -
-            nothing records which preset was used, because the document's terms
-            are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies. Discover the ids with
-            `GET /document-terms?kind=quote`.
+            LOAD a document template ("Vorlage"): its `terms_text`,
+            `payment_terms_text` and day count are copied onto the document,
+            which then owns its own snapshot. Write-only on purpose - nothing
+            records which template was used, because the document's terms are
+            editable afterwards and a stored reference would go on naming a
+            template whose text no longer applies. Discover the ids with
+            `GET /document-templates?kind=quote`.
+
+
+            It carries texts and days ONLY. A template's default attachments
+            (`document_ids`) are applied when a document is CREATED, never by
+            naming a template on one that already exists.
+
+
+            Replaced `document_term_id`, which now answers 422 - see this
+            schema's description.
         terms_text:
           type: string
           description: >-
-            Type the terms yourself. Applied AFTER `document_term_id`, so sending
-            both loads the preset and then keeps your wording - which is what
-            "pick a preset and edit it in one request" has to mean.
+            Type the terms yourself. Applied AFTER `document_template_id`, so
+            sending both loads the template and then keeps your wording - which
+            is what "pick a template and edit it in one request" has to mean.
         customer_id:
           type: string
           description: >-
@@ -2187,27 +2271,46 @@ components:
         keys EXCEPT the recipient-assignment ones (`customer_id`,
         `recipient_kind`, `recipient_ref_id`), which only apply while it is still
         a draft - an issued document's recipient is a snapshot.
+
+
+        **`document_term_id` was RETIRED.** Sending that key - with any value,
+        including null or an empty string - answers 422
+        `document_term_id_retired`. Use `document_template_id`. It is refused
+        rather than ignored on purpose: ignoring it would leave the document on
+        the default template and silently move `due_date`, so a caller who
+        thought they had chosen a preset would get a different date.
       properties:
         payment_mode: { type: string, enum: [direct_debit, all, individual] }
         payment_methods:
           type: array
           items: { type: string, enum: [online, transfer, cash] }
         document_send_mode: { type: string, enum: [link, attach] }
-        document_term_id:
+        document_template_id:
           type: string
           writeOnly: true
           description: >-
-            LOAD a Bedingungen preset: its text and day count are copied onto the
-            document, which then owns its own snapshot. Write-only on purpose -
-            nothing records which preset was used, because the document's terms
-            are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies. Discover the ids with
-            `GET /document-terms?kind=outbound_invoice`.
+            LOAD a document template ("Vorlage"): its `terms_text`,
+            `payment_terms_text` and day count are copied onto the document,
+            which then owns its own snapshot. Write-only on purpose - nothing
+            records which template was used, because the document's terms are
+            editable afterwards and a stored reference would go on naming a
+            template whose text no longer applies. Discover the ids with
+            `GET /document-templates?kind=invoice` - note the kind is `invoice`,
+            not `outbound_invoice`.
+
+
+            It carries texts and days ONLY. A template's default attachments
+            (`document_ids`) are applied when a document is CREATED, never by
+            naming a template on one that already exists.
+
+
+            Replaced `document_term_id`, which now answers 422 - see this
+            schema's description.
         terms_text:
           type: string
           description: >-
-            Type the terms yourself. Applied AFTER `document_term_id`, so sending
-            both loads the preset and then keeps your wording.
+            Type the terms yourself. Applied AFTER `document_template_id`, so
+            sending both loads the template and then keeps your wording.
         due_days:
           type: integer
           minimum: 0
@@ -2215,13 +2318,13 @@ components:
             Payment term in days, counted from the issue date; it SETS
             `due_date`. `0` is a real value meaning due immediately, so send it
             as a number rather than leaving it out. An explicit `due_days` beats
-            the day count of a `document_term_id` in the same request.
+            the day count of a `document_template_id` in the same request.
 
 
             **This key was accepted and silently ignored until portal v1.4.x.**
             It was read only to switch the terms branch off and then never
             applied, so a request CARRYING it moved nothing - neither the key
-            itself nor the days of a `document_term_id` sent beside it, because
+            itself nor the days of a terms preset sent beside it, because
             its mere presence disabled that branch. A request without it was
             unaffected, so a preset alone always worked. A client that has been
             sending it as a no-op will now find the due date moving.
@@ -2443,23 +2546,34 @@ components:
     RecurringInvoiceInput:
       type: object
       additionalProperties: true
+      description: >-
+        **`document_term_id` was RETIRED.** Sending that key - with any value,
+        including null or an empty string - answers 422
+        `document_term_id_retired`. Use `document_template_id`.
+
+
+        Note this endpoint does NOT seed a template on create: a recurring
+        invoice created through v1 starts with both terms texts empty unless the
+        body says otherwise. Quotes and outbound invoices are seeded from the
+        organisation's default template; this one is not.
       properties:
-        document_term_id:
+        document_template_id:
           type: string
           writeOnly: true
           description: >-
-            LOAD a Bedingungen preset: its text and day count are copied onto the
-            document, which then owns its own snapshot. Write-only on purpose -
-            nothing records which preset was used, because the document's terms
-            are editable afterwards and a stored reference would go on naming a
-            preset whose text no longer applies. Discover the ids with
-            `GET /document-terms?kind=outbound_invoice`.
+            LOAD a document template ("Vorlage"): its `terms_text`,
+            `payment_terms_text` and day count are copied onto the template,
+            which then owns its own snapshot. Its days become `due_days` unless
+            the same request sends an explicit one. Write-only on purpose -
+            nothing records which template was used. Discover the ids with
+            `GET /document-templates?kind=invoice` - note the kind is `invoice`,
+            not `outbound_invoice`.
         terms_text:
           type: string
           description: >-
-            Type the terms yourself; applied AFTER `document_term_id`, so sending
-            both loads the preset and keeps your wording. Copied onto every
-            generated invoice.
+            Type the terms yourself; applied AFTER `document_template_id`, so
+            sending both loads the template and keeps your wording. Copied onto
+            every generated invoice.
         label: { type: string }
         customer_id:
           type: string
@@ -2489,7 +2603,7 @@ components:
           type: integer
           description: >-
             Payment term handed to each generated invoice. An explicit value beats
-            the day count of a `document_term_id` in the same request.
+            the day count of a `document_template_id` in the same request.
         document_send_mode:
           type: string
           enum: ["", link, attach]
