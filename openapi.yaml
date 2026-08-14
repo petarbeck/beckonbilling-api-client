@@ -756,13 +756,20 @@ paths:
 
 
         **The new invoice is seeded from a TEMPLATE, not from the quote.** Its
-        `terms_text`, `payment_terms_text`, `due_date` and default attachments
-        come from the customer's own settings, else the customer's template,
-        else the organisation's default invoice template - the same chain a
-        hand-made invoice resolves. The quote's own terms never travel: they say
-        different things on the two documents, and the quote wording holds
+        `terms_text`, `payment_terms_text` and `due_date` come from the
+        customer's own settings, else the customer's template, else the
+        organisation's default invoice template - the same chain a hand-made
+        invoice resolves. The quote's own terms never travel: they say different
+        things on the two documents, and the quote wording holds
         `{valid_until}`, which an invoice cannot resolve. Note `due_date` is
         therefore a date on a freshly converted invoice; it used to be `null`.
+
+
+        **Its `document_ids` do NOT follow that chain.** Attachments come only
+        from the ORGANISATION's default invoice template; a customer's own
+        template never contributes them, here or on a hand-made invoice. A
+        customer whose template carries no attachments therefore still gets the
+        organisation default's.
 
 
         Refusals worth handling, all by `error.key`: `invoice_scope_unknown`

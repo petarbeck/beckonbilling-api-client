@@ -538,8 +538,9 @@ $client->recurringInvoices->create([
     the quote wording even holds `{valid_until}`, a macro an invoice does not
     resolve. The new invoice is seeded from a template instead: the customer's
     own terms and days, else their template, else the organisation's default
-    invoice template. Its `due_date` and its default attachments come from there
-    too.
+    invoice template. Its `due_date` comes from that same chain. **Its
+    `document_ids` do NOT** - attachments come only from the ORGANISATION's
+    default template, never from the customer's, here as on a hand-made invoice.
   - On a QUOTE, omit `valid_until` on create to let the template supply the
     window.
   - On an INVOICE there is no `due_date` input at all - it is read-only. The key

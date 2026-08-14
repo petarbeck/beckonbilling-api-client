@@ -117,10 +117,16 @@ that will show up as errors in your log.**
 - **Converting a quote now starts the invoice from a template, like every other
   way of creating one.** `POST /quotes/{id}/convert` resolves the same chain a
   hand-made invoice does - the customer's own terms and day count, else their
-  template, else the organisation's default invoice template - and the resulting
-  invoice carries `terms_text`, `payment_terms_text`, a `due_date` and the
-  template's default attachments. No key is added, removed or renamed; the
-  VALUES on three fields change.
+  template, else the organisation's default invoice template - so the resulting
+  invoice carries `terms_text`, `payment_terms_text` and a `due_date`. No key is
+  added, removed or renamed; the VALUES on three fields change.
+
+  **The attachments do NOT follow that chain**, and it is the one thing here
+  worth reading twice. `document_ids` come only from the ORGANISATION's default
+  invoice template - a customer's own template never contributes them, exactly
+  as it never contributes them to a hand-made invoice. So a customer whose
+  template carries no attachments still gets the organisation default's, and a
+  converted invoice now carries attachments where it previously carried none.
 
   What they were, and why this is a repair rather than a preference:
 
