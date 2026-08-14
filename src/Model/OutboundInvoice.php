@@ -41,7 +41,11 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $cancelled_by_outbound_invoice_number That credit note's document number.
  * @property-read bool|null   $credit_note       Derived: true when positions net negative.
  * @property-read bool|null   $reverse_charge
- * @property-read string|null $terms_text      Snapshotted payment terms (from the org's terms preset).
+ * @property-read string|null $terms_text      Snapshotted terms ("Rechnungsbedingungen"), from the selected or
+ *                                             default document template. Empty by default - the sentence about
+ *                                             paying lives in payment_terms_text.
+ * @property-read string|null $payment_terms_text The SECOND terms text ("Zahlungsbedingungen"), printed AFTER
+ *                                             terms_text. Render both, in that order.
  * @property-read bool|null   $small_business  Issuer's Kleinunternehmer VAT exemption, snapshotted.
  * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
  *                                             An exempt document shows a single total and this note

@@ -1859,8 +1859,24 @@ components:
           type: string
           description: >-
             The effective terms text, snapshotted onto the document at creation
-            from the organisation's selected or default terms preset. Editing or
-            deleting the preset never changes an issued document.
+            from the selected or default document template. Editing or deleting
+            the template never changes an issued document. Labelled
+            "Angebotsbedingungen" on a quote.
+        payment_terms_text:
+          type: string
+          description: >-
+            The SECOND terms text, snapshotted the same way and printed AFTER
+            `terms_text`. On a quote it holds the down-payment terms
+            ("Anzahlungsbedingungen"), and **it is printed only when the quote
+            actually carries a down payment** - `deposit_type` set AND
+            `deposit_value` above zero. A quote at `percent` / `0` shows no
+            deposit line in its summary, so printing a paragraph about one would
+            describe something invisible.
+
+
+            Converting a quote does NOT carry this field onto the invoice: on a
+            quote it means the deposit terms, on an invoice the payment terms,
+            so copying it across would move one meaning into another.
         small_business:
           type: boolean
           description: >-
@@ -1981,6 +1997,13 @@ components:
             Type the terms yourself. Applied AFTER `document_template_id`, so
             sending both loads the template and then keeps your wording - which
             is what "pick a template and edit it in one request" has to mean.
+        payment_terms_text:
+          type: string
+          description: >-
+            The second terms text - on a quote, the down-payment terms. Same
+            precedence as `terms_text`: applied after the template, so it
+            survives loading one in the same request. Printed only when the
+            quote carries a real down payment (see the output schema).
         customer_id:
           type: string
           description: >-
@@ -2189,9 +2212,19 @@ components:
         terms_text:
           type: string
           description: >-
-            The effective payment terms, snapshotted onto the document at
-            creation from the organisation's selected or default terms preset.
-            Editing or deleting the preset never changes an issued document.
+            The effective terms text, snapshotted onto the document at creation
+            from the selected or default document template. Editing or deleting
+            the template never changes an issued document. Labelled
+            "Rechnungsbedingungen" on an invoice, and empty by default - the
+            sentence about paying lives in `payment_terms_text`.
+        payment_terms_text:
+          type: string
+          description: >-
+            The SECOND terms text, snapshotted the same way and printed AFTER
+            `terms_text`. On an invoice these are the payment terms
+            ("Zahlungsbedingungen") - the "payable by {due_date}" sentence - so
+            an invoice that used to carry its terms in `terms_text` now
+            typically carries them here. Render both, in that order.
         small_business:
           type: boolean
           description: >-
@@ -2311,6 +2344,12 @@ components:
           description: >-
             Type the terms yourself. Applied AFTER `document_template_id`, so
             sending both loads the template and then keeps your wording.
+        payment_terms_text:
+          type: string
+          description: >-
+            The second terms text - on an invoice, the payment terms, printed
+            after `terms_text`. Same precedence: applied after the template, so
+            it survives loading one in the same request.
         due_days:
           type: integer
           minimum: 0
@@ -2486,8 +2525,14 @@ components:
         terms_text:
           type: string
           description: >-
-            The effective payment terms. Copied onto every invoice this template
+            The effective terms text. Copied onto every invoice this template
             generates, alongside the attached documents.
+        payment_terms_text:
+          type: string
+          description: >-
+            The SECOND terms text - the payment terms - copied onto every
+            generated invoice too, and printed AFTER `terms_text`. Same pair of
+            names as on a one-off invoice.
         email_text: { type: string, description: Cover-mail intro copied onto every generated invoice. }
         email_body: { type: string, description: Cover-mail body. }
         pdf_footer: { type: string }
@@ -2574,6 +2619,11 @@ components:
             Type the terms yourself; applied AFTER `document_template_id`, so
             sending both loads the template and keeps your wording. Copied onto
             every generated invoice.
+        payment_terms_text:
+          type: string
+          description: >-
+            The second terms text - the payment terms - copied onto every
+            generated invoice as well, and printed after `terms_text`.
         label: { type: string }
         customer_id:
           type: string

@@ -33,7 +33,9 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $payment_method   LEGACY. "BANK_TRANSFER" | "DIRECT_DEBIT".
  * @property-read string|null $tax_label
  * @property-read bool|null   $reverse_charge
- * @property-read string|null $terms_text      Payment terms copied onto every generated invoice.
+ * @property-read string|null $terms_text      Terms copied onto every generated invoice.
+ * @property-read string|null $payment_terms_text The SECOND terms text, copied onto every generated invoice too
+ *                                             and printed AFTER terms_text.
  * @property-read string|null $email_text      Cover-mail intro for every generated invoice.
  * @property-read string|null $email_body
  * @property-read string|null $pdf_footer

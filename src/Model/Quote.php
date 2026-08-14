@@ -26,7 +26,13 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $document_send_mode "link" | "attach".
  * @property-read array|null  $reference_fields
  * @property-read bool|null   $reverse_charge
- * @property-read string|null $terms_text      Snapshotted payment/validity terms (from the org's terms preset).
+ * @property-read string|null $terms_text      Snapshotted terms ("Angebotsbedingungen"), from the selected or
+ *                                             default document template.
+ * @property-read string|null $payment_terms_text The SECOND terms text, printed AFTER terms_text. On a quote it
+ *                                             holds the down-payment terms, and it is printed only when the
+ *                                             quote carries a real down payment (deposit_type set AND
+ *                                             deposit_value > 0). Converting a quote does NOT carry it onto the
+ *                                             invoice - it means deposit terms here, payment terms there.
  * @property-read bool|null   $small_business  Issuer's Kleinunternehmer VAT exemption, snapshotted.
  * @property-read string|null $vat_exemption_note Statutory sentence to print when exempt; null otherwise.
  *                                             An exempt document shows a single total and this note

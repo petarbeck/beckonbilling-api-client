@@ -491,10 +491,23 @@ $client->recurringInvoices->create([
   `unit_plural` empty - the server resolves it from the organisation's unit
   vocabulary and snapshots it, so renaming a unit never re-inflects an issued
   document. An empty plural means the unit does not inflect (`8 h`).
-- Quotes and invoices carry `terms_text`: the effective payment/validity terms,
-  snapshotted from the organisation's default terms preset at creation.
-  Editing or deleting a preset never changes an issued document.
-  - On a QUOTE, omit `valid_until` on create to let the preset supply the
+- **Every document carries TWO terms texts: `terms_text` and
+  `payment_terms_text`**, both snapshotted from the selected or default document
+  template at creation, and both printed - `terms_text` first. Editing or
+  deleting a template never changes a document that already exists. One pair of
+  names on quotes, outbound invoices and recurring invoices; only the label the
+  portal shows differs (quote: Angebotsbedingungen / **Anzahlungs**bedingungen;
+  invoice and recurring: Rechnungsbedingungen / **Zahlungs**bedingungen).
+  - An invoice's `terms_text` is empty by default now - the "payable by
+    {due_date}" sentence lives in `payment_terms_text`. **If you render only
+    `terms_text` you will print nothing on a typical invoice.**
+  - On a QUOTE `payment_terms_text` holds the down-payment terms and is printed
+    **only when the quote carries a real down payment** - `deposit_type` set AND
+    `deposit_value` above zero. At `percent` / `0` no deposit line appears in the
+    summary either, so the paragraph would describe something invisible.
+  - Converting a quote does NOT carry `payment_terms_text` onto the invoice: it
+    means deposit terms on the one and payment terms on the other.
+  - On a QUOTE, omit `valid_until` on create to let the template supply the
     window.
   - On an INVOICE there is no `due_date` input at all - it is read-only. The key
     that moves the date is **`due_days`** (see below).
