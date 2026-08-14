@@ -46,14 +46,25 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read float|null  $inherited_rate   What hourly_rate would resolve to with no override.
  * @property-read float|null  $balance          Signed; positive = customer holds credit.
  * @property-read int|null    $risk_level       Read-only dunning risk indicator.
- * @property-read string|null $quote_document_term_id   Bedingungen preset applied to a QUOTE when this
- *                                                      customer is assigned. A default, not a snapshot.
- * @property-read string|null $quote_terms_text         Negotiated wording overriding the preset's text.
- * @property-read int|null    $quote_valid_days         Overrides the preset's days. NULL = inherit; 0 is real.
- * @property-read string|null $invoice_document_term_id The same for outbound invoices; also supplies the
- *                                                      payment term, so due_date moves with it.
+ * @property-read string|null $quote_template_id        Document template applied to a QUOTE when this customer
+ *                                                      is assigned. A default, not a snapshot. NULL = none, so
+ *                                                      the organisation's default template applies. Replaced
+ *                                                      quote_document_term_id.
+ * @property-read int|null    $quote_valid_days         Overrides the template's days. NULL = inherit; 0 is real.
+ * @property-read bool|null   $quote_terms_override     Whether quote_terms_text replaces the template's terms.
+ *                                                      A REAL switch, not "the text is non-empty" - on with an
+ *                                                      empty text means "print no terms for this customer".
+ * @property-read string|null $quote_terms_text         Negotiated terms; applied only when the switch is on.
+ * @property-read bool|null   $quote_payment_terms_override  The same switch for the second text.
+ * @property-read string|null $quote_payment_terms_text Negotiated down-payment terms for this customer.
+ * @property-read string|null $invoice_template_id      The same for outbound invoices (kind `invoice`); also
+ *                                                      supplies the payment term, so due_date moves with it.
+ *                                                      Replaced invoice_document_term_id.
+ * @property-read int|null    $invoice_due_days         Overrides the template's days. NULL = inherit; 0 is real.
+ * @property-read bool|null   $invoice_terms_override
  * @property-read string|null $invoice_terms_text
- * @property-read int|null    $invoice_due_days         Overrides the preset's days. NULL = inherit; 0 is real.
+ * @property-read bool|null   $invoice_payment_terms_override
+ * @property-read string|null $invoice_payment_terms_text
  *
  * Any other field the API returns is reachable via property/array access too.
  */

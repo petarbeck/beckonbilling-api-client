@@ -1512,46 +1512,77 @@ components:
         reverse_charge: { type: boolean }
         balance: { type: number, description: Signed; positive = customer holds credit. }
         risk_level: { type: integer, description: Read-only dunning risk indicator. }
-        quote_document_term_id:
+        quote_template_id:
           type: string
           nullable: true
           description: >-
-            Bedingungen preset applied to a QUOTE when this customer is assigned
+            Document template applied to a QUOTE when this customer is assigned
             to one. A default, not a snapshot: the document takes its own copy,
             so editing the customer never rewrites a document that already
-            exists. Must be a preset of kind `quote` belonging to the same
-            organisation. Null = no customer default; the organisation's default
-            preset applies instead.
-        quote_terms_text:
-          type: string
-          description: >-
-            Optional negotiated wording for this customer's quotes, overriding
-            the preset's own text. Empty = use the preset's text.
+            exists. Must be a template of kind `quote` belonging to the same
+            organisation - unknown, foreign and wrong-kind ids all answer 404
+            `document_template_not_found`. Null = no customer default; the
+            organisation's default template applies instead.
+
+
+            Replaced `quote_document_term_id`, which was removed.
         quote_valid_days:
           type: integer
           nullable: true
           description: >-
-            Validity in days for this customer's quotes, overriding the preset's
-            own day count. **Null means inherit** - not 0, which is a legitimate
-            value meaning "expires the same day". Send null (or omit) to clear an
-            override.
-        invoice_document_term_id:
+            Validity in days for this customer's quotes, overriding the
+            template's own day count. **Null means inherit** - not 0, which is a
+            legitimate value meaning "expires the same day". Send null (or an
+            empty string) to clear an override.
+        quote_terms_override:
+          type: boolean
+          description: >-
+            Whether `quote_terms_text` below replaces the template's terms for
+            this customer. **A real switch, not "the text is non-empty"** - on
+            with an empty text is the meaningful combination "print no terms at
+            all for this customer", which a text-is-empty test cannot express.
+        quote_terms_text:
+          type: string
+          description: >-
+            Negotiated terms for this customer's quotes. Applied only when
+            `quote_terms_override` is true.
+        quote_payment_terms_override:
+          type: boolean
+          description: The same switch for the second terms text below.
+        quote_payment_terms_text:
+          type: string
+          description: >-
+            Negotiated down-payment terms for this customer's quotes. Applied
+            only when `quote_payment_terms_override` is true.
+        invoice_template_id:
           type: string
           nullable: true
           description: >-
-            The same for OUTBOUND INVOICES; must be a preset of kind
-            `outbound_invoice`. It also supplies the payment term, so assigning
-            the customer moves `due_date` as well as the text.
-        invoice_terms_text:
-          type: string
-          description: Optional negotiated wording for this customer's invoices.
+            The same for OUTBOUND INVOICES; must be a template of kind
+            `invoice`. It also supplies the payment term, so assigning the
+            customer moves `due_date` as well as the texts. Replaced
+            `invoice_document_term_id`, which was removed.
         invoice_due_days:
           type: integer
           nullable: true
           description: >-
             Payment term in days for this customer's invoices, overriding the
-            preset's. **Null means inherit**; 0 is a real value meaning due
+            template's. **Null means inherit**; 0 is a real value meaning due
             immediately.
+        invoice_terms_override:
+          type: boolean
+          description: Whether `invoice_terms_text` replaces the template's terms for this customer.
+        invoice_terms_text:
+          type: string
+          description: Negotiated terms for this customer's invoices. Applied only when the switch above is true.
+        invoice_payment_terms_override:
+          type: boolean
+          description: Whether `invoice_payment_terms_text` replaces the template's payment terms.
+        invoice_payment_terms_text:
+          type: string
+          description: >-
+            Negotiated payment terms for this customer's invoices. Applied only
+            when `invoice_payment_terms_override` is true.
 
     CustomerInput:
       type: object
@@ -1615,46 +1646,77 @@ components:
               email: { type: string }
               phone: { type: string }
         reverse_charge: { type: boolean }
-        quote_document_term_id:
+        quote_template_id:
           type: string
           nullable: true
           description: >-
-            Bedingungen preset applied to a QUOTE when this customer is assigned
+            Document template applied to a QUOTE when this customer is assigned
             to one. A default, not a snapshot: the document takes its own copy,
             so editing the customer never rewrites a document that already
-            exists. Must be a preset of kind `quote` belonging to the same
-            organisation. Null = no customer default; the organisation's default
-            preset applies instead.
-        quote_terms_text:
-          type: string
-          description: >-
-            Optional negotiated wording for this customer's quotes, overriding
-            the preset's own text. Empty = use the preset's text.
+            exists. Must be a template of kind `quote` belonging to the same
+            organisation - unknown, foreign and wrong-kind ids all answer 404
+            `document_template_not_found`. Null = no customer default; the
+            organisation's default template applies instead.
+
+
+            Replaced `quote_document_term_id`, which was removed.
         quote_valid_days:
           type: integer
           nullable: true
           description: >-
-            Validity in days for this customer's quotes, overriding the preset's
-            own day count. **Null means inherit** - not 0, which is a legitimate
-            value meaning "expires the same day". Send null (or omit) to clear an
-            override.
-        invoice_document_term_id:
+            Validity in days for this customer's quotes, overriding the
+            template's own day count. **Null means inherit** - not 0, which is a
+            legitimate value meaning "expires the same day". Send null (or an
+            empty string) to clear an override.
+        quote_terms_override:
+          type: boolean
+          description: >-
+            Whether `quote_terms_text` below replaces the template's terms for
+            this customer. **A real switch, not "the text is non-empty"** - on
+            with an empty text is the meaningful combination "print no terms at
+            all for this customer", which a text-is-empty test cannot express.
+        quote_terms_text:
+          type: string
+          description: >-
+            Negotiated terms for this customer's quotes. Applied only when
+            `quote_terms_override` is true.
+        quote_payment_terms_override:
+          type: boolean
+          description: The same switch for the second terms text below.
+        quote_payment_terms_text:
+          type: string
+          description: >-
+            Negotiated down-payment terms for this customer's quotes. Applied
+            only when `quote_payment_terms_override` is true.
+        invoice_template_id:
           type: string
           nullable: true
           description: >-
-            The same for OUTBOUND INVOICES; must be a preset of kind
-            `outbound_invoice`. It also supplies the payment term, so assigning
-            the customer moves `due_date` as well as the text.
-        invoice_terms_text:
-          type: string
-          description: Optional negotiated wording for this customer's invoices.
+            The same for OUTBOUND INVOICES; must be a template of kind
+            `invoice`. It also supplies the payment term, so assigning the
+            customer moves `due_date` as well as the texts. Replaced
+            `invoice_document_term_id`, which was removed.
         invoice_due_days:
           type: integer
           nullable: true
           description: >-
             Payment term in days for this customer's invoices, overriding the
-            preset's. **Null means inherit**; 0 is a real value meaning due
+            template's. **Null means inherit**; 0 is a real value meaning due
             immediately.
+        invoice_terms_override:
+          type: boolean
+          description: Whether `invoice_terms_text` replaces the template's terms for this customer.
+        invoice_terms_text:
+          type: string
+          description: Negotiated terms for this customer's invoices. Applied only when the switch above is true.
+        invoice_payment_terms_override:
+          type: boolean
+          description: Whether `invoice_payment_terms_text` replaces the template's payment terms.
+        invoice_payment_terms_text:
+          type: string
+          description: >-
+            Negotiated payment terms for this customer's invoices. Applied only
+            when `invoice_payment_terms_override` is true.
 
     CustomerList:
       allOf:

@@ -482,16 +482,28 @@ $client->recurringInvoices->create([
   `payment_terms_text` - those are what render. Being refused rather than
   ignored is deliberate: ignoring it would leave the document on the default
   template and silently move `valid_until` / `due_date`.
-- A **customer** carries default Bedingungen per document kind
-  (`quote_document_term_id` / `quote_terms_text`,
-  `invoice_document_term_id` / `invoice_terms_text`). Assigning that customer to
-  a quote or invoice applies them - text AND the day count, so `valid_until` /
-  `due_date` move with the terms. Precedence: what your request explicitly sent,
-  then the customer's default, then the organisation's. A default, never a
-  snapshot: the document takes a copy, so editing a customer cannot rewrite a
-  document that already exists. The pair also carries `quote_valid_days` /
-  `invoice_due_days`, overriding the preset's day count - **null means inherit,
-  not 0**, since 0 is a real value.
+- A **customer** carries defaults per document kind - six fields each for
+  quotes and invoices: `quote_template_id`, `quote_valid_days`,
+  `quote_terms_override` / `quote_terms_text`,
+  `quote_payment_terms_override` / `quote_payment_terms_text`, and the
+  `invoice_*` twins (with `invoice_due_days`). `quote_document_term_id` and
+  `invoice_document_term_id` were removed; the `*_template_id` pair replaced
+  them, and an id that is unknown, foreign or of the wrong kind answers 404
+  `document_template_not_found`.
+
+  Assigning that customer to a quote or invoice applies them - the texts AND the
+  day count, so `valid_until` / `due_date` move too. Full precedence, highest
+  first: what your request explicitly sent, then the customer's own texts and
+  days **where the matching switch is on**, then the customer's template, then
+  the organisation's default template, then a bare fallback of 30 days for a
+  quote and 14 for an invoice. A default, never a snapshot: the document takes a
+  copy, so editing a customer cannot rewrite a document that already exists.
+  - **The `*_override` switches are real booleans, not "the text is
+    non-empty".** Switch on with an empty text is the meaningful combination
+    "print nothing for this customer"; switch off means "use the template". A
+    client that infers the switch from the text cannot express the first.
+  - `*_valid_days` / `*_due_days`: **null means inherit, not 0**, since 0 is a
+    real value.
 - Positions may carry a per-line discount: `discount_type`
   (`none`|`percent`|`amount`) + `discount_value`.
 - **`supply_type`** on a position (`service` | `goods`, empty behaves as
