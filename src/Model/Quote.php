@@ -24,6 +24,11 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $partner_id
  * @property-read array|null  $document_ids    Attached document UUIDs.
  * @property-read string|null $document_send_mode "link" | "attach".
+ * @property-read string|null $language        "" | "DE" | "EN". Stamped at creation from the recipient's
+ *                                             country (DE for DE/AT/CH, else EN; the organisation's own
+ *                                             language only when the recipient has no country). An explicit
+ *                                             value wins and is snapshotted. "" on an existing quote means it
+ *                                             predates this field.
  * @property-read array|null  $reference_fields
  * @property-read bool|null   $reverse_charge
  * @property-read string|null $terms_text      Snapshotted terms ("Angebotsbedingungen"), from the selected or

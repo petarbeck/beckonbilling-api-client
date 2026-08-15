@@ -555,6 +555,30 @@ $client->recurringInvoices->create([
   net/VAT breakdown** - showing it as an ordinary 0 % document is legally wrong.
   The note's citation differs per issuer country and follows the organisation's
   language; print it as given.
+- **`language`** (`""` | `DE` | `EN`) on quotes, outbound invoices and
+  recurring invoices is the language a document is rendered and mailed in.
+  On a quote or invoice it is stamped at creation from the **recipient's
+  country** - `DE` for Germany, Austria or Switzerland, `EN` for anywhere
+  else - falling back to the organisation's own language only when the
+  recipient carries no country at all. There is no per-organisation
+  exception any more; the recipient's country is the whole rule. An explicit
+  value sent with the same request always wins and is snapshotted, so a
+  later address change or rename never rewrites a document that already
+  exists, and `cancel()`'s credit note carries the original invoice's
+  language forward unchanged. `""` on a document you did not just write
+  means it predates this field - resolve it yourself from
+  `recipient.country`, else the organisation's language. Sending a value
+  outside `DE`/`EN` is not refused; it silently normalises to `""`. A
+  recurring invoice may leave it `""` on purpose - a template is a rule, not
+  a record, and `""` means "let each generated invoice resolve its own
+  language from its own customer"; assigning a customer to the template does
+  NOT stamp this field.
+- **`OutboundInvoice.dunning_mode`** (`auto` | `include` | `exclude`) is
+  read-only through this API. `auto` derives eligibility for the portal's
+  dunning run from how the invoice was created (an imported invoice is
+  excluded); `include`/`exclude` are explicit overrides set in the portal.
+  Sending it on a write here is silently ignored - it always has been, this
+  is only now documented.
 - Phone fields are E.164 (`+436601791301`).
 - `public_index` (document number) is an opaque string.
 - Recipient is a structured object; `customer_type`/`type` is `business` or

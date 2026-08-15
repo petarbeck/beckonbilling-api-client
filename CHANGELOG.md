@@ -112,6 +112,28 @@ that will show up as errors in your log.**
   percentage to only the goods or only the service lines, decided per line by
   its `supply_type`.
 
+- **`language`** (`""` | `DE` | `EN`) on quotes, outbound invoices and
+  recurring invoices - the language a document is rendered and mailed in.
+  On a quote or invoice it is stamped at creation from the **recipient's
+  country** (DE for Germany, Austria or Switzerland, EN for anywhere else),
+  falling back to the organisation's own language only when the recipient
+  carries no country at all - there is no per-organisation exception to this
+  rule any more. An explicit value in the same request always wins and is
+  snapshotted, so a later address change or rename never rewrites a document
+  that already exists; `""` on an existing document just means it predates
+  this field. On a recurring invoice `""` means "follow the recipient" -
+  each generated invoice resolves its own language independently, and
+  assigning a customer to the template does not stamp this field, only an
+  explicit value does.
+
+- **`OutboundInvoice.dunning_mode`** (`auto` | `include` | `exclude`,
+  read-only) says whether an invoice is eligible for the portal's dunning
+  run. `auto` derives it from how the invoice was created; `include` and
+  `exclude` are explicit overrides. It can only be changed in the portal
+  itself - sending it on a write to this API is silently ignored, the same
+  as it always has been, so nothing here is a behaviour change; only the
+  field's presence in the response is new.
+
 ### Changed (values, not schema - nothing is refused that used to pass)
 
 - **Converting a quote now starts the invoice from a template, like every other

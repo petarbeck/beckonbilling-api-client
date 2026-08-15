@@ -37,6 +37,14 @@ namespace BeckonBilling\ApiClient\Model;
  *                                               "all", the document's own clipped selection for "individual".
  * @property-read string|null $payment_method    LEGACY, frozen at BANK_TRANSFER on every row. Never render it.
  * @property-read string|null $document_send_mode "link" | "attach". A document always carries a concrete value.
+ * @property-read string|null $language          "" | "DE" | "EN". Stamped at creation from the recipient's
+ *                                               country (DE for DE/AT/CH, else EN; the organisation's own
+ *                                               language only when the recipient has no country). An explicit
+ *                                               value wins and is snapshotted. "" on an existing invoice means it
+ *                                               predates this field.
+ * @property-read string|null $dunning_mode      "auto" | "include" | "exclude". READ-ONLY here - only the
+ *                                               portal itself can change it. "auto" excludes an invoice with
+ *                                               source "import" and includes everything else.
  * @property-read bool|null   $paid              Derived from payment records.
  * @property-read float|null  $paid_amount
  * @property-read string|null $paid_at           ISO datetime; null until fully paid.

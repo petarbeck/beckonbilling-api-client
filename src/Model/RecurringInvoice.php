@@ -30,6 +30,10 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $document_send_mode "" | "link" | "attach". A template MAY stay empty, unlike a
  *                                                quote or an invoice: it then leaves delivery to the customer,
  *                                                else the organisation.
+ * @property-read string|null $language         "" | "DE" | "EN". "" means each generated invoice resolves its
+ *                                               own language from its own customer's country; a concrete value
+ *                                               overrides that for every invoice this template generates.
+ *                                               Assigning a customer to the template does NOT stamp this field.
  * @property-read string|null $payment_method   LEGACY. "BANK_TRANSFER" | "DIRECT_DEBIT".
  * @property-read string|null $tax_label
  * @property-read bool|null   $reverse_charge

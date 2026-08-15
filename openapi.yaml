@@ -1971,6 +1971,27 @@ components:
             the PDF attached. A quote always carries a concrete value: it is
             resolved at creation from the customer, else the organisation. Only a
             CUSTOMER may leave this open.
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            The language this quote is rendered and mailed in. Stamped at
+            creation from the RECIPIENT's country - DE for Germany, Austria or
+            Switzerland, EN for anywhere else - falling back to the
+            organisation's own language only when the recipient carries no
+            country at all. There is no per-organisation exception to this
+            rule.
+
+
+            An explicit value sent in the same request always wins over that
+            derivation, and it is a SNAPSHOT: assigning a different customer
+            later, or renaming the current one, never rewrites a quote that
+            already exists.
+
+
+            `""` on a quote you did not just write means it predates this
+            field - resolve it the same way the server does, from
+            `recipient.country`, falling back to the organisation's language.
         reference_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
@@ -2132,9 +2153,10 @@ components:
           type: string
           description: >-
             Assigning a customer SNAPSHOTS their recipient, reverse-charge flag,
-            commission partner and document defaults onto the quote - unless
-            the same request states them explicitly, which wins. A customer from
-            another organisation is refused with 404 `customer_not_found`.
+            commission partner, language and document defaults onto the quote -
+            unless the same request states them explicitly, which wins. A
+            customer from another organisation is refused with 404
+            `customer_not_found`.
         recipient:
           allOf: [ { $ref: "#/components/schemas/Recipient" } ]
           description: >-
@@ -2158,6 +2180,15 @@ components:
             keep the organisation's auto-include selection. A document belonging
             to another organisation is refused.
         document_send_mode: { type: string, enum: [link, attach] }
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            Overrides the language derived from the recipient's country (see
+            the output schema). Sending `""` clears the override back to
+            unresolved - the same state a quote from before this field
+            existed is in. A value outside `DE`/`EN` is not refused; it
+            silently normalises to `""`, same as omitting the key.
         email_text: { type: string, description: Cover-mail text for this quote. }
         pdf_footer: { type: string, description: Printed footer. Was `footer_comment`. }
         reference_fields:
@@ -2315,6 +2346,28 @@ components:
             the PDF attached. An invoice always carries a concrete value: it is
             resolved at creation from the customer, else the organisation. Only a
             CUSTOMER may leave this open.
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            The language this invoice is rendered and mailed in. Stamped at
+            creation from the RECIPIENT's country - DE for Germany, Austria or
+            Switzerland, EN for anywhere else - falling back to the
+            organisation's own language only when the recipient carries no
+            country at all. There is no per-organisation exception to this
+            rule.
+
+
+            An explicit value sent in the same request always wins over that
+            derivation, and it is a SNAPSHOT: assigning a different customer
+            later, or renaming the current one, never rewrites an invoice
+            that already exists. `cancel()`'s credit note carries the
+            invoice's own language forward unchanged, never re-resolved.
+
+
+            `""` on an invoice you did not just write means it predates this
+            field - resolve it the same way the server does, from
+            `recipient.country`, falling back to the organisation's language.
         paid: { type: boolean }
         paid_amount: { type: number }
         paid_at:
@@ -2367,6 +2420,19 @@ components:
         cancelled_by_outbound_invoice_number:
           type: string
           description: The human document number behind `cancelled_by_outbound_invoice_id`.
+        dunning_mode:
+          type: string
+          enum: [auto, include, exclude]
+          readOnly: true
+          description: >-
+            Whether this invoice is eligible for the portal's dunning
+            (Mahnwesen) run. `auto` derives it from how the invoice was
+            created - an invoice with `source: import` is excluded,
+            everything else is included; `include` and `exclude` are
+            explicit overrides. **Read-only through this API**: it is set in
+            the portal itself, never through this endpoint or the MCP
+            connector, so a value here always reflects a decision made
+            outside your integration.
         reverse_charge: { type: boolean }
         terms_text:
           type: string
@@ -2477,6 +2543,15 @@ components:
           type: array
           items: { type: string, enum: [online, transfer, cash] }
         document_send_mode: { type: string, enum: [link, attach] }
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            Overrides the language derived from the recipient's country (see
+            the output schema). Sending `""` clears the override back to
+            unresolved - the same state an invoice from before this field
+            existed is in. A value outside `DE`/`EN` is not refused; it
+            silently normalises to `""`, same as omitting the key.
         document_template_id:
           type: string
           writeOnly: true
@@ -2532,9 +2607,9 @@ components:
           description: >-
             Draft only. Assigning a customer SNAPSHOTS their recipient, addresses,
             reverse-charge flag, commission partner, payment methods, delivery
-            mode and document defaults onto the invoice - unless the same
-            request states them explicitly, which wins. A customer from another
-            organisation is refused with 404.
+            mode, language and document defaults onto the invoice - unless the
+            same request states them explicitly, which wins. A customer from
+            another organisation is refused with 404.
         recipient_kind:
           type: string
           enum: [customer, supplier, partner]
@@ -2678,6 +2753,19 @@ components:
             unlike a quote or an invoice: it is a rule, not a record, so leaving
             it open lets each generated invoice resolve delivery from the customer
             and then the organisation. A concrete value here overrides both.
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            `""` means "follow the recipient": each generated invoice
+            resolves its OWN language at the moment it is created, from its
+            customer's country, by the same rule a one-off invoice uses.
+            A concrete `DE` or `EN` here overrides that on every invoice this
+            template generates, regardless of the customer. Unlike a quote or
+            an invoice, a template MAY stay empty on purpose - it is a rule,
+            not a record. **Assigning a customer to the template does NOT
+            stamp this field**, unlike the customer's terms/day-count
+            defaults - only an explicit value here changes it.
         tax_label: { type: string }
         reverse_charge: { type: boolean }
         credit_note: { type: boolean, readOnly: true, description: "Derived - true when the positions net negative." }
@@ -2817,6 +2905,13 @@ components:
           type: string
           enum: ["", link, attach]
           description: Empty deliberately allowed here - see the output schema.
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            Empty deliberately allowed here - see the output schema. `""`
+            (the default) lets each generated invoice resolve its own
+            language from its own customer.
         payment_mode: { type: string, enum: [direct_debit, all, individual] }
         payment_methods:
           type: array
