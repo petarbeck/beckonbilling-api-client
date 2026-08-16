@@ -104,7 +104,7 @@ Resource properties and their models:
 | `$client->customers` | `customers` | `Model\Customer` | `customers` |
 | `$client->articleCategories` | `article-categories` | `Model\ArticleCategory` | `articles` |
 | `$client->articles` | `articles` | `Model\Article` | `articles` |
-| `$client->units` | `units` | `Model\Unit` | any of `articles`/`quotes`/`outbound_invoices`/`recurring_invoices` |
+| `$client->units` | `units` | `Model\Unit` | none - readable with any valid token |
 | `$client->documentTemplates` | `document-templates` | `Model\DocumentTemplate` | `quotes` or `outbound_invoices` |
 | `$client->quotes` | `quotes` | `Model\Quote` | `quotes` |
 | `$client->outboundInvoices` | `outbound-invoices` | `Model\OutboundInvoice` | `outbound_invoices` |
@@ -228,35 +228,45 @@ variant later never changes what a document says was sold.
 
 ### Units (`$client->units`) - read-only
 
-The organisation's unit vocabulary, and **the list the server validates a
-position's `unit` against**: anything outside it is refused with 422
-the vocabulary. So this is not a display nicety - read it before writing
-positions and pick a `short` from it.
+A **fixed catalogue of 31 system units, identical for every organisation**. It
+is no longer a per-organisation vocabulary: nothing you send adds to it, and
+there is nothing to rename or retire. Each row has a lowercase `key` plus, per
+language, the printed forms.
 
 ```php
 foreach ($client->units->autoPaging() as $unit) {
-    echo $unit->short, ' ', $unit->plural, "\n";   // "Monat" "Monate"
+    echo $unit->key, ' ', $unit->de['short'], ' ', $unit->en['short'], "\n";
+    // piece  Stk.  pc.
 }
 ```
 
-Why it is a vocabulary rather than free text: a document prints the unit
-INFLECTED once the quantity leaves 1 ("12 Monate", not "12 Monat"), and only a
-vocabulary entry carries a plural to inflect to. Empty `plural` means the unit
-does not inflect ("8 h").
+**`$unit->short` and `$unit->plural` no longer exist** - the printed forms moved
+under `de` / `en`, because the same unit prints differently depending on the
+language the document goes out in.
 
-Two things that bite:
+An article and a position do **not** take the same value, and this is the part
+that bites:
 
-- The check runs on the **resolved** unit. Omitting `unit` does not skip it - it
-  falls back to the named article's unit and then to the organisation's default,
-  and it is *that* value which must be known.
-- A unit **already stored** on the record you are saving always keeps passing,
-  even after it is retired from the vocabulary. Otherwise deleting a unit would
-  make every document that ever used it unsaveable, for edits that have nothing
-  to do with it.
+| | what to send | unknown value |
+|---|---|---|
+| **article** `unit` | the `key` (`piece`, `hour`, `month`) | **422 `unit_unknown`** |
+| **position** `unit` | a `key`, or any printed text | never refused |
 
-Readable by any token with View on any one of `articles`, `quotes`,
-`outbound_invoices` or `recurring_invoices` - a token allowed to write a
-document must be able to read what its documents are checked against.
+- **An article's `unit` is validated**, matched exactly and lowercase. A printed
+  short form is not a key, so `Stk.`, `h` and `pc.` are all refused. Omitting it
+  on create stores `piece`; an explicit `''` stores "no unit".
+- **A position's `unit` is resolved and snapshotted as TEXT.** Send a key and you
+  read back the printed short form and plural *in the issuing organisation's
+  language* - `piece` becomes `pc.`/`pcs.` for an English organisation and
+  `Stk.`/`''` for a German one. Send anything else and it is stored verbatim.
+  So **the value you read back is often not the value you sent**; that is by
+  design, and sending the resolved value back is stable.
+
+There is no `unit_too_long` refusal any more, and no length limit.
+
+**No permission is required to read this list** - it is the same for everybody
+and says nothing about the organisation. It used to need View on one of the
+document features, back when it was the organisation's own vocabulary.
 
 ### Document templates (`$client->documentTemplates`) - read-only
 
@@ -514,11 +524,13 @@ $client->recurringInvoices->create([
 - A position may name a catalog **variant** with `article_variant_id`; the
   server then takes that variant's resolved values and snapshots its name into
   `variant_label`. Send the id and leave the label empty.
-- Positions carry `unit` (short form, e.g. `h`, `Stk.`) and `unit_plural` (the
-  form printed once the quantity leaves 1, e.g. `Monate`). Send `unit` and leave
-  `unit_plural` empty - the server resolves it from the organisation's unit
-  vocabulary and snapshots it, so renaming a unit never re-inflects an issued
-  document. An empty plural means the unit does not inflect (`8 h`).
+- Positions carry `unit` and `unit_plural`. Send a system unit KEY (`piece`,
+  `hour`, `month` - see Units above) and leave `unit_plural` empty; the server
+  resolves both into printed TEXT in the issuing organisation's language and
+  snapshots them, so a position stores `pc.`, never `piece`. Anything that is
+  not a key is taken verbatim. Nothing here is ever refused, and **what you read
+  back is often not what you sent**. An empty plural means the unit does not
+  inflect (`8 h`).
 - **Every document carries TWO terms texts: `terms_text` and
   `payment_terms_text`**, both snapshotted from the selected or default document
   template at creation, and both printed - `terms_text` first. Editing or
@@ -557,28 +569,46 @@ $client->recurringInvoices->create([
   language; print it as given.
 - **`language`** (`""` | `DE` | `EN`) on quotes, outbound invoices and
   recurring invoices is the language a document is rendered and mailed in.
-  On a quote or invoice it is stamped at creation from the **recipient's
-  country** - `DE` for Germany, Austria or Switzerland, `EN` for anywhere
-  else - falling back to the organisation's own language only when the
-  recipient carries no country at all. There is no per-organisation
-  exception any more; the recipient's country is the whole rule. An explicit
+  On a quote or invoice it is stamped at creation from **the recipient
+  record's own `language`** (`Customer.language`), NOT recomputed from the
+  address. Country enters one step earlier, when the *customer* is stamped
+  (`DE` for Germany, Austria or Switzerland, `EN` for anywhere else, else the
+  organisation's language). The difference is not academic: a customer in
+  Germany whose `language` is `EN` produces an `EN` invoice, so deriving the
+  document language from `recipient.country` yourself gets it wrong for
+  exactly the customers somebody took the trouble to set. An explicit
   value sent with the same request always wins and is snapshotted, so a
   later address change or rename never rewrites a document that already
   exists, and `cancel()`'s credit note carries the original invoice's
   language forward unchanged. `""` on a document you did not just write
-  means it predates this field - resolve it yourself from
-  `recipient.country`, else the organisation's language. Sending a value
-  outside `DE`/`EN` is not refused; it silently normalises to `""`. A
+  means it predates this field - resolve it from the linked customer's
+  `language`, else `recipient.country`, else the organisation's language.
+  Sending a value outside `DE`/`EN` is not refused; it silently normalises to `""`. A
   recurring invoice may leave it `""` on purpose - a template is a rule, not
   a record, and `""` means "let each generated invoice resolve its own
   language from its own customer"; assigning a customer to the template does
   NOT stamp this field.
+- **`Customer.language`** (`DE` | `EN`) is where a document's language comes
+  from, so it is the field to set when a customer must be billed in English.
+  Omit it and the server derives one from `country` and **stamps it on save**;
+  send it and your value is fixed for good - changing `country` afterwards
+  does not move it. In practice you will only ever read `DE` or `EN`. Three
+  silent behaviours: a body that does not mention the key leaves the stored
+  value alone, a value that is neither `DE` nor `EN` (including `""`) is
+  ignored rather than refused, and matching is case-insensitive (`en` works).
 - **`OutboundInvoice.dunning_mode`** (`auto` | `include` | `exclude`) is
   read-only through this API. `auto` derives eligibility for the portal's
   dunning run from how the invoice was created (an imported invoice is
   excluded); `include`/`exclude` are explicit overrides set in the portal.
   Sending it on a write here is silently ignored - it always has been, this
-  is only now documented.
+  is only now documented. Its resolved companion **`dunning_excluded`**
+  (boolean) is the one to read when the question is simply "will this be
+  chased?", and **`source`** (`manual`, `recurring`, `import`, `dunning_fee`,
+  `partner_payout`, `cancellation`, treat as open) is what `auto` resolves
+  against.
+- **`organisation_id`** is on every entity here. It matters with a USER token,
+  which may span several organisations; an organisation token only ever sees
+  its own.
 - Phone fields are E.164 (`+436601791301`).
 - `public_index` (document number) is an opaque string.
 - Recipient is a structured object; `customer_type`/`type` is `business` or

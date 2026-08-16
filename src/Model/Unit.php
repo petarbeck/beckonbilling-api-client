@@ -5,25 +5,31 @@ declare(strict_types=1);
 namespace BeckonBilling\ApiClient\Model;
 
 /**
- * A unit of measure from the organisation's vocabulary (`/api/v1/units`).
+ * One entry of the system unit catalogue (`/api/v1/units`).
  *
- * Read-only on this API. It exists because the server VALIDATES a position's
- * `unit` against this list: a short form that is not in it is refused with 422
- * the vocabulary. So this is the list to pick from, not a display nicety -
- * a value outside it is adopted, which grows the vocabulary by accident.
+ * A FIXED list of 31 units, identical for every organisation and read-only.
+ * It is no longer a per-organisation vocabulary: nothing you send adds to it,
+ * and there is nothing to rename or retire. Reading it needs no permission -
+ * it says nothing about the organisation.
  *
- * The reason a unit is managed vocabulary rather than free text is `plural`.
- * A document prints the unit inflected - "12 Monate", not "12 Monat" - and a
- * typed value has no plural form to inflect to.
+ * An article and a position do NOT take the same value:
  *
- * @property-read string      $id
- * @property-read string|null $short         The printed short form, e.g. "h", "Stk.", "Monat". THIS is what a
- *                                           position's `unit` must match (case-insensitively).
- * @property-read string|null $plural        The form printed once the quantity leaves 1, e.g. "Monate".
- *                                           Empty means the unit does not inflect ("8 h").
- * @property-read string|null $label         The long human name, e.g. "Stunde".
- * @property-read string|null $display_label What the portal's pickers show; `short` plus the label when it has one.
- * @property-read int|null    $position      Sort order within the vocabulary.
+ *  - an ARTICLE's `unit` is the `key`, matched exactly and lowercase, and an
+ *    unknown one answers 422 `unit_unknown`. A printed short form is not a key,
+ *    so "Stk.", "h" and "pc." are all refused;
+ *  - a POSITION's `unit` is never refused. A key is resolved to the printed
+ *    short form and plural IN THE ISSUING ORGANISATION'S LANGUAGE and both are
+ *    snapshotted as text, so `piece` reads back as "pc."/"pcs." for an English
+ *    organisation. Anything else is stored verbatim.
+ *
+ * The plural is why the printed forms are managed at all: a document inflects
+ * the unit once the quantity leaves 1 ("12 Monate", not "12 Monat"). An empty
+ * plural means the unit does not inflect ("8 h").
+ *
+ * @property-read string      $id     Same value as `key`; present so the row has the `id` every entity here has.
+ * @property-read string|null $key    The catalogue key, lowercase, e.g. "piece", "hour", "month".
+ * @property-read array|null  $de     German forms: `['short' => 'Stk.', 'label' => 'Stück', 'plural' => '']`.
+ * @property-read array|null  $en     English forms: `['short' => 'pc.', 'label' => 'Piece', 'plural' => 'pcs.']`.
  */
 final class Unit extends Entity
 {

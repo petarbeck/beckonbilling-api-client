@@ -9,6 +9,8 @@ namespace BeckonBilling\ApiClient\Model;
  * feature.
  *
  * @property-read string      $id
+ * @property-read string|null $organisation_id  Uuid of the owning organisation. Matters with a USER token,
+ *                                              which may span several organisations.
  * @property-read string|null $label
  * @property-read string|null $fibu_code   Default revenue account for its articles.
  */

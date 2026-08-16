@@ -20,6 +20,15 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $zip
  * @property-read string|null $city
  * @property-read string|null $country          ISO-2 country code.
+ * @property-read string|null $language         "DE" | "EN" - the language this customer's documents go out in,
+ *                                              and where a quote's or invoice's own `language` is stamped from.
+ *                                              Omit it on write and the server derives one from `country`
+ *                                              (DACH -> DE, else EN, else the organisation's language) and stamps
+ *                                              it on save; send it and it is fixed for good - a later change of
+ *                                              `country` does NOT move it. A document SNAPSHOTS it, so changing it
+ *                                              never re-languages a document that already exists.
+ * @property-read string|null $organisation_id  Uuid of the owning organisation. Matters with a USER token, which
+ *                                              may span several organisations.
  * @property-read string|null $vat_id
  * @property-read string|null $email
  * @property-read string|null $additional       Free-form extra address lines.

@@ -45,6 +45,17 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $dunning_mode      "auto" | "include" | "exclude". READ-ONLY here - only the
  *                                               portal itself can change it. "auto" excludes an invoice with
  *                                               source "import" and includes everything else.
+ * @property-read bool|null   $dunning_excluded  $dunning_mode already RESOLVED: true when this invoice is left out
+ *                                               of the dunning run. Read this one for "will it be chased?", and
+ *                                               $dunning_mode for "was that decided, or derived?".
+ * @property-read string|null $source            How the invoice came to exist, and what "auto" resolves against:
+ *                                               "manual", "recurring", "import" (the one value auto excludes),
+ *                                               "dunning_fee", "partner_payout", "cancellation". Treat as open.
+ * @property-read int|null    $view_count        Opens of the public invoice page. NOT an email read receipt - a PDF
+ *                                               handed over any other way is invisible here, so an absent count is
+ *                                               not evidence the customer never saw it.
+ * @property-read int|null    $download_count    Downloads of the PDF from that page.
+ * @property-read string|null $organisation_id   Uuid of the owning organisation.
  * @property-read bool|null   $paid              Derived from payment records.
  * @property-read float|null  $paid_amount
  * @property-read string|null $paid_at           ISO datetime; null until fully paid.

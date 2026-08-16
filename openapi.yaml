@@ -41,12 +41,13 @@ info:
     `bank_not_permitted`.
 
     Two collections are **read-only** here - `units` and `document-templates`.
-    They are the organisation's vocabulary, which a caller must be able to READ
-    to build a valid document; managing them stays a portal action, and every
-    method but `GET` answers 405. `units` is readable with View on any one of
-    `articles`, `quotes`, `outbound_invoices` or `recurring_invoices`;
-    `document-templates` with View on `quotes` or `outbound_invoices`, and its
-    rows are filtered to the kinds that token may actually view.
+    A caller must be able to READ them to build a valid document; managing them
+    stays a portal action, and every method but `GET` answers 405. They are
+    gated differently, because only one of them says anything about the
+    organisation: **`units` needs no permission at all** (it is the same fixed
+    system list for everybody), while `document-templates` needs View on
+    `quotes` or `outbound_invoices`, and its rows are filtered to the kinds
+    that token may actually view.
 
 
     **`/document-terms` was REMOVED** and now answers 404;
@@ -88,20 +89,33 @@ info:
       an undeclared endpoint into a hard failure. Every other entity here is
       covered, so do not read a pass on those two as a validated request.
 
-    ## Units are a vocabulary, not free text
+    ## Units are a fixed system catalogue, and an article and a position use it differently
 
-    A position's `unit`, and an article's, is matched against the
-    organisation's units (`GET /units`). The reason is the printed document: a
-    unit is inflected once the quantity leaves 1 ("12 Monate"), and only a
-    vocabulary entry carries the plural form to inflect to.
+    `GET /units` is a **fixed list of 31 system units**, identical for every
+    organisation. It is no longer a vocabulary each organisation keeps and
+    grows: nothing you send can add to it, nothing can be renamed out of it,
+    and there is no `unit_too_long` refusal any more. Each entry has a
+    lowercase `key` (`piece`, `hour`, `month`) and, per language, the printed
+    short form, the long label and the plural.
 
-    A unit the organisation does not stock yet is **added to its vocabulary**,
-    not refused - send `unit_plural` alongside if it inflects, or the new entry
-    is created without one and prints unchanged. Matching is trimmed and
-    case-insensitive, and **the stored value is the vocabulary's spelling**, so
-    sending `stk.` against a vocabulary holding `Stk.` reads back as `Stk.`
-    rather than creating a second entry. The only refusal is a value too long to
-    be a unit at all (over 32 characters, **422 `unit_too_long`**).
+    The two places a unit appears do **not** take the same value.
+
+    - **An article's `unit` is a KEY**, and an unknown one answers
+      **422 `unit_unknown`**. It is matched exactly, lowercase, with no
+      case-folding. A printed short form is not a key, so `Stk.`, `h` and `pc.`
+      are all refused; send `piece`, `hour`, `month`. Omitting `unit` on create
+      stores `piece`; an explicit `""` stores "no unit" and is kept.
+    - **A position's `unit` is never refused.** Send a key and the server
+      resolves it to the printed short form and plural **in the issuing
+      organisation's language**, then snapshots both onto the line: `piece`
+      reads back as `pc.`/`pcs.` for an English organisation and `Stk.`/`""`
+      for a German one. Send anything else and it is taken verbatim as printed
+      text. Positions therefore store TEXT, never a key, which is what keeps an
+      issued document printing what it printed the day it was issued.
+
+    Because a position's `unit` is resolved on the way in, **the value you read
+    back is not always the value you sent**. That is normal here, and sending
+    the resolved value straight back is stable.
   license:
     name: MIT
     url: https://github.com/petarbeck/beckonbilling-api-client/blob/main/LICENSE
@@ -126,7 +140,7 @@ tags:
   - name: Article categories
   - name: Articles
   - name: Units
-    description: The organisation's unit vocabulary. Read-only.
+    description: The fixed system catalogue of units. Read-only, same for every organisation.
   - name: Document templates
     description: Document templates ("Vorlagen"). Read-only. Replaced "Document terms".
   - name: Quotes
@@ -487,19 +501,19 @@ paths:
   /units:
     get:
       tags: [Units]
-      summary: List the organisation's unit vocabulary
+      summary: List the system unit catalogue
       description: >-
-        The short forms a position's `unit` (and an article's) resolves
-        against. A value outside this list is ADDED to it rather than refused,
-        so reading it first is how you avoid growing the vocabulary by accident
-        - and how you learn the spelling the server will store.
+        The fixed list of 31 system units, the same for every organisation.
+        Each row carries the `key` an ARTICLE's `unit` must be one of, and the
+        printed forms per language a POSITION's `unit` resolves to. Read it to
+        learn the keys: an article's `unit` is validated against them and an
+        unknown one answers 422 `unit_unknown`.
 
 
-        Readable with View on ANY ONE of `articles`, `quotes`,
-        `outbound_invoices` or `recurring_invoices` - a token that may write a
-        document has to be able to read the vocabulary its documents are checked
-        against, and a unit ("Stk.", "h") discloses nothing such a token cannot
-        already read off the documents themselves.
+        **No permission is required.** The list is the same for everyone and
+        discloses nothing about the organisation, so any valid token may read
+        it. It used to be gated on holding View for one of the document
+        features, back when it was the organisation's own vocabulary.
       parameters:
         - $ref: "#/components/parameters/organisation"
         - $ref: "#/components/parameters/limit"
@@ -1218,23 +1232,27 @@ components:
         unit:
           type: string
           description: >-
-            Short unit printed after the quantity, e.g. "h", "Stk.". Resolved
-            against the organisation's units (`GET /units`), because only a
-            vocabulary entry carries the plural form the document inflects to.
+            Short unit printed after the quantity, e.g. "h", "Stk.". **Never
+            refused, whatever you send**, and stored as TEXT rather than as a
+            catalogue key - which is what keeps an issued document printing
+            what it printed on the day it was issued.
 
 
-            A unit the organisation does not stock yet is ADDED to its
-            vocabulary rather than refused, carrying whatever `unit_plural` you
-            sent with it (without one it is created as a unit that does not
-            inflect, and prints unchanged). **Read back what you get**: matching
-            is trimmed and case-insensitive, and the value stored is the
-            VOCABULARY'S spelling, so `stk.` against a vocabulary holding `Stk.`
-            comes back as `Stk.` instead of becoming a second entry for the same
-            unit. Omitting it is normal - the value then falls back to the named
-            article's unit and then to the organisation's default. The only
-            refusal is a value that cannot be a unit at all: over 32 characters
-            answers **422 `unit_too_long`**, because storing it would truncate
-            silently.
+            Two ways to send it. A **catalogue key** (`piece`, `hour`, `month`
+            - see `GET /units`) is resolved to the printed short form and
+            plural **in the issuing organisation's language** and both are
+            snapshotted onto the line, so `piece` reads back as `pc.`/`pcs.`
+            for an English organisation and `Stk.`/`""` for a German one.
+            **Anything else is taken verbatim** as printed text, with
+            `unit_plural` from your body when supplied, else looked up by the
+            printed short form.
+
+
+            **So the value you read back is often not the value you sent.**
+            That is by design; sending the resolved value back is stable.
+            Omitting it is normal - it then falls back to the named article's
+            unit and finally to `piece`. There is no length limit and no
+            `unit_too_long` refusal any more.
         unit_plural:
           type: string
           description: >-
@@ -1317,24 +1335,39 @@ components:
       type: object
       additionalProperties: true
       description: >-
-        A unit of measure from the organisation's vocabulary. Read-only here,
-        and the list a position's `unit` is validated against.
+        One entry of the fixed system unit catalogue. Read-only, and identical
+        for every organisation. `key` is what an ARTICLE's `unit` must be; the
+        per-language blocks are what a POSITION's `unit` is resolved to and
+        snapshotted as.
       properties:
-        id: { type: string }
-        short:
+        id: { type: string, description: Same value as `key`. Present so the row has the `id` every entity here has. }
+        key:
           type: string
           description: >-
-            The printed short form, e.g. "h", "Stk.", "Monat". THIS is what a
-            position's or article's `unit` must match (case-insensitively).
+            The catalogue key, lowercase, e.g. `piece`, `hour`, `month`. THIS
+            is the value an article's `unit` must be, matched exactly - a
+            printed short form such as "Stk." or "h" is not a key and answers
+            422 `unit_unknown`.
+        de: { $ref: "#/components/schemas/UnitForms" }
+        en: { $ref: "#/components/schemas/UnitForms" }
+
+    UnitForms:
+      type: object
+      additionalProperties: true
+      description: The printed forms of a unit in one language.
+      properties:
+        short:
+          type: string
+          description: The printed short form, e.g. "Stk." (de) or "pc." (en). This is what a position stores.
+        label:
+          type: string
+          description: The long human name, e.g. "Stück" (de), "Piece" (en).
         plural:
           type: string
           description: >-
-            The form printed once the quantity leaves 1, e.g. "Monate". Empty
-            means the unit does not inflect ("8 h"). Its existence is the reason
-            units are a managed vocabulary rather than free text.
-        label: { type: string, description: The long human name, e.g. "Stunde". }
-        display_label: { type: string, readOnly: true, description: What the portal's pickers show. }
-        position: { type: integer, description: Sort order within the vocabulary. }
+            The form printed once the quantity leaves 1, e.g. "pcs.". Empty
+            means the unit does not inflect ("8 h") and the short form prints
+            unchanged.
 
     UnitList:
       allOf:
@@ -1459,6 +1492,14 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated (e.g. an automated import)." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         display_name: { type: string, readOnly: true, description: "Der anzuzeigende Name: bei einer Firma company_name, bei einer Privatperson salutation + person_name. Ersetzt das entfallene 'label'." }
@@ -1474,6 +1515,25 @@ components:
         zip: { type: string }
         city: { type: string }
         country: { type: string, description: ISO-2 country code. }
+        language:
+          type: string
+          enum: ["", DE, EN]
+          description: >-
+            The language documents for this customer go out in - PDF, cover
+            mail and public document page alike. A quote or invoice SNAPSHOTS
+            it at creation, so moving the customer to another language never
+            re-languages a document already issued.
+
+
+            In practice you will only ever read `DE` or `EN`: a customer with
+            no language set is stamped with one when it is saved, derived from
+            `country` (DACH -> DE, everything else -> EN) and falling back to
+            the organisation's own language when there is no country. `""` is
+            the not-yet-stamped state and is not something you can store.
+
+
+            Sending it explicitly wins over the derivation and is a decision,
+            not a hint: changing `country` afterwards does NOT move it.
         vat_id: { type: string, description: UID / VAT number, printed on the document. }
         additional: { type: string, description: Free-form extra address lines. }
         email: { type: string, description: General address. `recipient_email` is what documents are sent to. }
@@ -1621,6 +1681,24 @@ components:
         zip: { type: string }
         city: { type: string }
         country: { type: string, description: ISO-2 country code. }
+        language:
+          type: string
+          enum: [DE, EN]
+          description: >-
+            The language documents for this customer go out in. Omit it and the
+            server derives one from `country` (DACH -> DE, else EN, falling
+            back to the organisation's own language when there is no country)
+            and stamps it on save; send it and your value wins for good - a
+            later change of `country` does NOT move it. Case-insensitive, so
+            `en` is accepted.
+
+
+            Two silent behaviours worth knowing: a body that does not mention
+            the key leaves the stored value untouched, and a value that is
+            neither DE nor EN (including `""`) is **ignored rather than
+            refused** - the record keeps what it had, or takes the derivation
+            if it had nothing. So a typo here does not fail, it just does not
+            apply.
         vat_id: { type: string }
         additional: { type: string }
         email: { type: string }
@@ -1749,6 +1827,14 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         label: { type: string }
         fibu_code: { type: string }
 
@@ -1766,6 +1852,14 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         title: { type: string }
@@ -1775,11 +1869,10 @@ components:
         unit:
           type: string
           description: >-
-            Default short unit for lines created from this article, e.g. "h",
-            "Stk.". Resolved against the organisation's units (`GET /units`); a
-            value it does not stock yet is added to the vocabulary rather than
-            refused, and what comes back is the vocabulary's spelling. Over 32
-            characters answers 422 `unit_too_long`.
+            The system catalogue KEY this article's lines start from, e.g.
+            `piece`, `hour`, `month` (`GET /units`). An article stores the key
+            itself, not a printed form - the printing happens per document, in
+            the issuing organisation's language. `""` means "no unit".
         article_group_id: { type: string }
         group_label:
           type: string
@@ -1831,10 +1924,13 @@ components:
         unit:
           type: string
           description: >-
-            Resolved against the organisation's units (`GET /units`); a value
-            it does not stock yet is added to the vocabulary rather than
-            refused. What comes back is the vocabulary's spelling. Over 32
-            characters answers 422 `unit_too_long`.
+            A system catalogue KEY (`GET /units`), e.g. `piece`, `hour`,
+            `month` - matched exactly, lowercase, with no case-folding.
+            **An unknown value answers 422 `unit_unknown`**, and a printed
+            short form is not a key, so `Stk.`, `h` and `pc.` are all refused.
+            Omitted on CREATE it stores `piece`; an explicit `""` stores
+            "no unit" and is kept. Unlike a position's `unit`, this one is
+            validated.
         article_group_id: { type: string }
         fibu_code: { type: string }
         commission_eligible: { type: boolean }
@@ -1919,6 +2015,14 @@ components:
       additionalProperties: true
       properties:
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         recipient_kind:
           type: string
           enum: [customer, lead, supplier, partner]
@@ -1976,11 +2080,13 @@ components:
           enum: ["", DE, EN]
           description: >-
             The language this quote is rendered and mailed in. Stamped at
-            creation from the RECIPIENT's country - DE for Germany, Austria or
-            Switzerland, EN for anywhere else - falling back to the
-            organisation's own language only when the recipient carries no
-            country at all. There is no per-organisation exception to this
-            rule.
+            creation from **the recipient record's own `language` field**
+            (`Customer.language`), NOT recomputed from the address. That
+            distinction matters: a customer in Germany whose `language` was set
+            to EN produces an EN quote, so predicting this from
+            `recipient.country` gets it wrong for exactly those customers.
+            Country only enters one step earlier, when the customer itself is
+            stamped (DACH -> DE, else EN, else the organisation's language).
 
 
             An explicit value sent in the same request always wins over that
@@ -1990,8 +2096,8 @@ components:
 
 
             `""` on a quote you did not just write means it predates this
-            field - resolve it the same way the server does, from
-            `recipient.country`, falling back to the organisation's language.
+            field - resolve it from the linked customer's `language`, else
+            `recipient.country`, else the organisation's language.
         reference_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
@@ -2310,6 +2416,14 @@ components:
             cannot express, holding only one. To find every invoice belonging to
             a quote, match on this field rather than reading that one.
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this record; null = system-generated (e.g. a recurring run or a dunning fee invoice)." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         public_index: { type: string }
@@ -2351,11 +2465,13 @@ components:
           enum: ["", DE, EN]
           description: >-
             The language this invoice is rendered and mailed in. Stamped at
-            creation from the RECIPIENT's country - DE for Germany, Austria or
-            Switzerland, EN for anywhere else - falling back to the
-            organisation's own language only when the recipient carries no
-            country at all. There is no per-organisation exception to this
-            rule.
+            creation from **the recipient record's own `language` field**
+            (`Customer.language`), NOT recomputed from the address. That
+            distinction matters: a customer in Germany whose `language` was set
+            to EN produces an EN invoice, so predicting this from
+            `recipient.country` gets it wrong for exactly those customers.
+            Country only enters one step earlier, when the customer itself is
+            stamped (DACH -> DE, else EN, else the organisation's language).
 
 
             An explicit value sent in the same request always wins over that
@@ -2366,8 +2482,8 @@ components:
 
 
             `""` on an invoice you did not just write means it predates this
-            field - resolve it the same way the server does, from
-            `recipient.country`, falling back to the organisation's language.
+            field - resolve it from the linked customer's `language`, else
+            `recipient.country`, else the organisation's language.
         paid: { type: boolean }
         paid_amount: { type: number }
         paid_at:
@@ -2433,6 +2549,28 @@ components:
             the portal itself, never through this endpoint or the MCP
             connector, so a value here always reflects a decision made
             outside your integration.
+        dunning_excluded:
+          type: boolean
+          readOnly: true
+          description: >-
+            `dunning_mode` already RESOLVED for this invoice - true when it
+            will be left out of the dunning run. Read this one when the
+            question is "will this be chased?", and `dunning_mode` when the
+            question is "was that decided, or derived?". Under `auto` it is
+            derived from `source`, which is why the two only make sense read
+            together.
+        source:
+          type: string
+          readOnly: true
+          description: >-
+            How this invoice came to exist - the field `dunning_mode: auto`
+            resolves against. Values seen in practice: `manual` (typed in the
+            portal, or created through this API), `recurring` (generated by a
+            recurring invoice), `import` (taken over from a previous system,
+            and the one value `auto` excludes from dunning), `dunning_fee` (a
+            Mahnspesen invoice), `partner_payout`, and `cancellation` (the
+            credit note behind a storno). Treat the list as open rather than
+            switching on it exhaustively.
         reverse_charge: { type: boolean }
         terms_text:
           type: string
@@ -2498,6 +2636,15 @@ components:
             The customer-facing page for this invoice. Empty before it is issued.
             Its PDF and attachments stop being downloadable 90 days after the
             issue date.
+        view_count:
+          type: integer
+          readOnly: true
+          description: >-
+            Opens of the public invoice page. **Not an email read receipt**:
+            it counts the page being opened, so a PDF handed over any other way
+            is invisible here. An absent count is therefore not evidence the
+            customer never saw the invoice.
+        download_count: { type: integer, readOnly: true, description: Downloads of the invoice PDF from that page. }
         net_total: { type: number }
         tax_total: { type: number }
         gross_total: { type: number }
@@ -2716,6 +2863,14 @@ components:
             ways if a mandate is revoked. Online payment is only ever offered
             when the organisation has a working Stripe configuration.
         id: { type: string }
+        organisation_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: >-
+            Uuid of the organisation this record belongs to. Useful with a USER
+            token, which may span several organisations; an organisation token
+            is bound to one and will only ever see its own.
         created_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "Uuid of the user who created this TEMPLATE; null = system-generated. Invoices the automation agent generates from it are always system-created (created_by null), regardless of who created the template." }
         created_by_name: { type: string, readOnly: true, description: "Display name of the creator; empty string when created_by is null." }
         label: { type: string }

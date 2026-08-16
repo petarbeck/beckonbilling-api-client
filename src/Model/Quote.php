@@ -8,6 +8,8 @@ namespace BeckonBilling\ApiClient\Model;
  * A quote (`/api/v1/quotes`). Lifecycle: draft -> issued -> won | lost | converted.
  *
  * @property-read string      $id
+ * @property-read string|null $organisation_id  Uuid of the owning organisation. Matters with a USER token,
+ *                                              which may span several organisations.
  * @property-read string|null $created_by      Uuid of the user who created this record; null = system-generated (e.g. a recurring run).
  * @property-read string|null $created_by_name Display name of the creator; '' when created_by is null.
  * @property-read string|null $public_index    Document number (opaque; e.g. "2607-1000-2").

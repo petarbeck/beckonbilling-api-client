@@ -3,11 +3,15 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
-## [0.12.0] - 2026-08-14
+## [0.12.0] - 2026-08-16
 
-Terms presets became document templates, and a quote can now be billed as a
-down payment plus a remainder. **Three things break; the first two are the ones
-that will show up as errors in your log.**
+Terms presets became document templates, units became a fixed system catalogue,
+and a quote can now be billed as a down payment plus a remainder. **Several
+things break. The three that will show up as errors in your log are the retired
+`document_term_id`, the removed `/document-terms` endpoint, and an article's
+`unit`, which must now be a catalogue key such as `piece` rather than a printed
+`Stk.`** If you read `$unit->short` anywhere, that breaks silently instead -
+see the units entry below.
 
 ### Changed (BREAKING)
 
@@ -63,6 +67,54 @@ that will show up as errors in your log.**
   scope is a typed string rather than an array precisely so this fails loudly
   instead of quietly posting your options as a request body and dropping the
   organisation scope.
+
+- **Units are a fixed SYSTEM catalogue now, and `Unit` has a different shape.**
+  What used to be each organisation's own vocabulary is one list of 31 entries,
+  identical for everybody. **`$unit->short`, `$unit->plural`, `$unit->label`,
+  `$unit->display_label` and `$unit->position` no longer exist**; a row is now
+  `id`, `key`, and the printed forms nested per language:
+
+  ```php
+  $unit->key;            // 'piece'
+  $unit->de['short'];    // 'Stk.'
+  $unit->en['plural'];   // 'pcs.'
+  ```
+
+  They moved under a language because the same unit prints differently
+  depending on the language the document goes out in, which a single flat
+  `short` could not express.
+
+- **An article's `unit` must be a catalogue KEY, and an unknown one answers
+  422 `unit_unknown`.** This is the third turn on this field, so read it
+  carefully rather than trusting a memory of the last two: 0.9.0 announced this
+  refusal, 0.10.0 retracted it because it never reached a deployed server, and
+  it is now real - but **only on articles, and for the opposite reason**. Then
+  it was a vocabulary that could grow; now it is a fixed list that cannot.
+
+  The trap is that a key is not a printed form. `Stk.`, `h` and `pc.` are all
+  refused; send `piece`, `hour`, `month`. Any code that has been putting a
+  printed short form on an article since the beginning will start failing, and
+  that is most code. `GET /units` is where the keys come from. Omitting `unit`
+  on create stores `piece`; an explicit `''` still means "no unit".
+
+- **A position's `unit` is the opposite: never refused, and resolved on the way
+  in.** Send a key and you read back the printed short form and plural **in the
+  issuing organisation's language** - `piece` comes back as `pc.`/`pcs.` for an
+  English organisation, `Stk.`/`''` for a German one. Send anything else and it
+  is stored verbatim. So **the value you read back is often not the value you
+  sent**, which is by design: a position stores printed TEXT so that reprinting
+  an issued document says what it said on the day. Sending the resolved value
+  straight back is stable.
+
+  Two smaller consequences: there is no `unit_too_long` refusal any more and no
+  length limit, and nothing you send can add to the catalogue, so "read it back
+  to see what got stored in the vocabulary" is no longer a thing you need to do.
+
+- **`GET /units` needs no permission.** It used to require View on one of
+  `articles` / `quotes` / `outbound_invoices` / `recurring_invoices`. A fixed
+  list that is the same for every organisation discloses nothing, so any valid
+  token may read it. Nothing that worked stops working; a token that could not
+  read it before can now.
 
 ### Added
 
@@ -168,6 +220,43 @@ that will show up as errors in your log.**
   Same for the MCP tool `convert_quote_to_invoice`, which goes through the same
   service.
 
+- **`Customer.language`** (`DE` | `EN`), in and out, and the field a document's
+  own `language` is actually stamped from - so this is what you set when a
+  customer must be billed in English. Omit it and the server derives one from
+  `country` (DACH -> DE, else EN, else the organisation's language) and stamps
+  it **on save**; send it and it is fixed for good, and a later change of
+  `country` does not move it. Case-insensitive.
+
+  It has been on the wire and accepted on input the whole time; only the
+  contract was silent, so a generated client dropped it and a caller had no
+  documented way to bill a customer in English.
+
+  Three silent behaviours worth knowing, since none of them fails loudly: a
+  body that does not mention the key leaves the stored value alone; a value
+  that is neither `DE` nor `EN` (including `""`) is **ignored rather than
+  refused**, so a typo does not error, it just does not apply; and in practice
+  you will only ever read `DE` or `EN`, never `""`.
+
+- **`OutboundInvoice.dunning_excluded`** (boolean) and **`OutboundInvoice.source`**
+  (string). `dunning_excluded` is `dunning_mode` already RESOLVED - read it when
+  the question is "will this be chased?", and `dunning_mode` when it is "was
+  that decided, or derived?". `source` (`manual`, `recurring`, `import`,
+  `dunning_fee`, `partner_payout`, `cancellation`; treat the list as open) is
+  what `auto` resolves against, and `dunning_mode`'s own description has
+  referred to it since it was documented, without the field ever being
+  described. Both read-only.
+
+- **`OutboundInvoice.view_count` and `download_count`**, which `Quote` has
+  documented all along while the invoice returned them undocumented. Note what
+  they are not: opens of the public invoice PAGE, not an email read receipt. A
+  PDF handed over any other way is invisible here, so an absent count is not
+  evidence the customer never saw the invoice.
+
+- **`organisation_id`** on customers, articles, article categories, quotes,
+  outbound invoices and recurring invoices. It matters with a USER token, which
+  may span several organisations; an organisation token only ever sees its own.
+  Deliberately absent from `Unit` and `DocumentTemplate`, which do not carry it.
+
 ### Fixed (documentation only, no server change)
 
 - The down-payment figures were described against the wrong basis.
@@ -176,6 +265,16 @@ that will show up as errors in your log.**
   recurring lines a down payment never covers; `Quote.remaining_amount` is
   measured against that same one-time basis. `deposit_value` is a percent for
   three of the five types, not one.
+
+- **A document's `language` was described as derived from the recipient's
+  COUNTRY. It is stamped from the recipient record's own `language` field.**
+  Country only decides one step earlier, when the customer itself is stamped.
+  The difference is not academic and it points the wrong way for exactly the
+  records somebody took the trouble to set: a customer in Germany whose
+  `language` is `EN` produces an `EN` invoice, so a client predicting the
+  document language from `recipient.country` gets it wrong precisely there.
+  Corrected on `Quote.language`, `OutboundInvoice.language`, in `AGENTS.md` and
+  in `llms.txt`.
 
 ## [0.11.0] - 2026-08-11
 
