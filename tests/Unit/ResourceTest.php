@@ -197,12 +197,24 @@ final class ResourceTest extends ClientTestCase
         $http = (new MockHttpClient())
             ->push(200, [
                 'data' => [
-                    ['id' => 'u1', 'short' => 'h', 'plural' => '', 'label' => 'Stunde'],
-                    ['id' => 'u2', 'short' => 'Monat', 'plural' => 'Monate', 'label' => 'Monat'],
+                    [
+                        'id' => 'piece', 'key' => 'piece',
+                        'de' => ['short' => 'Stück', 'label' => 'Stück', 'plural' => ''],
+                        'en' => ['short' => 'piece', 'label' => 'Piece', 'plural' => 'pieces'],
+                    ],
+                    [
+                        'id' => 'month', 'key' => 'month',
+                        'de' => ['short' => 'Monat', 'label' => 'Monat', 'plural' => 'Monate'],
+                        'en' => ['short' => 'month', 'label' => 'Month', 'plural' => 'months'],
+                    ],
                 ],
                 'total' => 2, 'limit' => 100, 'offset' => 0,
             ])
-            ->push(200, ['id' => 'u2', 'short' => 'Monat', 'plural' => 'Monate'])
+            ->push(200, [
+                'id' => 'month', 'key' => 'month',
+                'de' => ['short' => 'Monat', 'label' => 'Monat', 'plural' => 'Monate'],
+                'en' => ['short' => 'month', 'label' => 'Month', 'plural' => 'months'],
+            ])
             ->push(200, [
                 'data' => [['id' => 't1', 'kind' => 'invoice', 'days' => 0, 'is_default' => true]],
                 'total' => 1, 'limit' => 100, 'offset' => 0,
@@ -213,11 +225,22 @@ final class ResourceTest extends ClientTestCase
         $units = $client->units->list();
         $this->assertContainsOnlyInstancesOf(Unit::class, iterator_to_array($units));
         $this->assertStringEndsWith('/units', explode('?', (string) $http->requests[0]->getUri())[0]);
+        // The printed forms live UNDER a language - `$unit->short` and
+        // `$unit->plural` were removed in 0.12.0, and a flat fixture here would
+        // have gone on passing against a shape the server no longer sends.
+        $this->assertSame('piece', iterator_to_array($units)[0]->key);
+        $this->assertSame('Stück', iterator_to_array($units)[0]->de['short']);
         // An empty plural means "does not inflect", not "missing".
-        $this->assertSame('', iterator_to_array($units)[0]->plural);
-        $this->assertSame('Monate', iterator_to_array($units)[1]->plural);
+        $this->assertSame('', iterator_to_array($units)[0]->de['plural']);
+        $this->assertSame('Monate', iterator_to_array($units)[1]->de['plural']);
+        // The key is what an article's `unit` and a position's `unit_key` must
+        // be - never a printed form, which is why the two differ here.
+        $this->assertNotSame(
+            iterator_to_array($units)[0]->key,
+            iterator_to_array($units)[0]->de['short']
+        );
 
-        $this->assertInstanceOf(Unit::class, $client->units->get('u2'));
+        $this->assertInstanceOf(Unit::class, $client->units->get('month'));
 
         // The kind is `invoice`, not the `outbound_invoice` /document-terms used.
         $templates = $client->documentTemplates->list(['kind' => 'invoice']);
@@ -240,9 +263,9 @@ final class ResourceTest extends ClientTestCase
         $client = $this->makeClient($http);
 
         foreach ([
-            fn () => $client->units->create(['short' => 'kg']),
-            fn () => $client->units->update('u1', ['short' => 'kg']),
-            fn () => $client->units->delete('u1'),
+            fn () => $client->units->create(['key' => 'kg']),
+            fn () => $client->units->update('kg', ['key' => 'kg']),
+            fn () => $client->units->delete('kg'),
             fn () => $client->documentTemplates->create(['label' => 'x']),
             fn () => $client->documentTemplates->update('t1', ['label' => 'x']),
             fn () => $client->documentTemplates->delete('t1'),

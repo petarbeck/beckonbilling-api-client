@@ -100,22 +100,52 @@ info:
 
     The two places a unit appears do **not** take the same value.
 
-    - **An article's `unit` is a KEY**, and an unknown one answers
-      **422 `unit_unknown`**. It is matched exactly, lowercase, with no
-      case-folding. A printed short form is not a key, so `Stk.`, `h` and `pc.`
-      are all refused; send `piece`, `hour`, `month`. Omitting `unit` on create
-      stores `piece`; an explicit `""` stores "no unit" and is kept.
-    - **A position's `unit` is never refused.** Send a key and the server
-      resolves it to the printed short form and plural **in the issuing
-      organisation's language**, then snapshots both onto the line: `piece`
-      reads back as `pc.`/`pcs.` for an English organisation and `Stk.`/`""`
-      for a German one. Send anything else and it is taken verbatim as printed
-      text. Positions therefore store TEXT, never a key, which is what keeps an
-      issued document printing what it printed the day it was issued.
+    - **An article's `unit` is a KEY** - it already is the token, and there is
+      no second field. An unknown one answers **422 `unit_unknown`**. It is
+      matched exactly, lowercase, with no case-folding. A printed short form is
+      not a key, so `Stk.`, `h` and `pc.` are all refused; send `piece`, `hour`,
+      `month`. Omitting `unit` on create stores `piece`; an explicit `""` stores
+      "no unit" and is kept.
+    - **A position carries BOTH**: `unit_key` is the token, `unit` is the
+      printed wording snapshotted onto that line. Positions store TEXT, never a
+      key, which is what keeps an issued document printing what it printed the
+      day it was issued.
+
+    ### On a position, send `unit_key`
+
+    **Printed wordings move; keys do not.** On 2026-08-16 the German and English
+    wordings were spelled out - `Std.` became `Stunde`, `Stk.` became `Stück`,
+    `pc.` became `piece`. Any client that had a printed form wired into it was
+    then showing something the document no longer said. `unit_key` is the answer
+    to that, and it is what you should send.
+
+    Every position you read back now carries `unit_key` as well, so echoing a
+    document's own positions is the stable thing to do. An empty `unit_key`
+    means **"this line has no catalogue unit"** - a unit somebody typed by hand.
+    It does **not** mean "no unit"; that is still `unit: ""`.
+
+    How the two fields combine, and the middle rule is the one that matters:
+
+    - `unit_key` alone, or naming a **different** unit than `unit` does -> the
+      key wins and the server prints it in the issuing organisation's language.
+    - `unit_key` and `unit` naming the **same** unit -> the stored wording stays
+      exactly as it is. The key says WHICH unit the line is; `unit` records HOW
+      it was written on this document. Without this, merely reading a document
+      and saving it back would rewrite an issued invoice from `Stk.` to `Stück`
+      and put it at odds with the PDF the customer already has.
+    - No `unit_key` -> `unit` behaves exactly as it always has (see below).
+    - An unknown `unit_key` answers **422 `unit_unknown`**. This is safe to rely
+      on: the server only ever emits `""` or a valid key, so echoing can never
+      produce one.
+
+    `unit` on a position is still **never refused**, and that has not changed.
+    Send a key in it and the server resolves it; send anything else and it is
+    taken verbatim. Old integrations keep working untouched - `unit_key` is
+    purely additive.
 
     Because a position's `unit` is resolved on the way in, **the value you read
     back is not always the value you sent**. That is normal here, and sending
-    the resolved value straight back is stable.
+    back what you read is stable.
   license:
     name: MIT
     url: https://github.com/petarbeck/beckonbilling-api-client/blob/main/LICENSE
@@ -1229,23 +1259,51 @@ components:
         discount_type: { type: string, enum: [none, percent, amount], default: none }
         discount_value: { type: number, description: Percent 0-100 for `percent`, else a EUR amount. }
         commission_eligible: { type: boolean }
+        unit_key:
+          type: string
+          description: >-
+            **The way to state a unit on a position**: a catalogue key
+            (`piece`, `hour`, `month` - see `GET /units`). The server prints it
+            in the issuing organisation's own language and snapshots that
+            wording into `unit`.
+
+
+            Prefer this over `unit`. The printed wordings move - on 2026-08-16
+            `Std.` became `Stunde` and `pc.` became `piece` - and the keys do
+            not. Every position you read back carries this field, so echoing a
+            document's own positions is stable.
+
+
+            It overrides `unit` and `unit_plural`, with one deliberate
+            exception: **when `unit` names the SAME unit as this key, the stored
+            wording is kept verbatim.** Merely reading a document and saving it
+            back must not rewrite an issued invoice from `Stk.` to `Stück` and
+            put it at odds with the customer's PDF. A key naming a *different*
+            unit than `unit` does is a real change and wins.
+
+
+            An empty value means "no catalogue key for this line" (a
+            hand-typed unit) and falls through to `unit` - it does NOT mean "no
+            unit". An unknown key answers **422 `unit_unknown`**; safe to rely
+            on, since the server only ever emits `""` or a valid key.
         unit:
           type: string
           description: >-
-            Short unit printed after the quantity, e.g. "h", "Stk.". **Never
-            refused, whatever you send**, and stored as TEXT rather than as a
-            catalogue key - which is what keeps an issued document printing
-            what it printed on the day it was issued.
+            The printed wording that sits after the quantity, e.g. "Stück",
+            "Stunde". **Never refused, whatever you send**, and stored as TEXT
+            rather than as a catalogue key - which is what keeps an issued
+            document printing what it printed on the day it was issued.
 
 
-            Two ways to send it. A **catalogue key** (`piece`, `hour`, `month`
-            - see `GET /units`) is resolved to the printed short form and
-            plural **in the issuing organisation's language** and both are
-            snapshotted onto the line, so `piece` reads back as `pc.`/`pcs.`
-            for an English organisation and `Stk.`/`""` for a German one.
-            **Anything else is taken verbatim** as printed text, with
-            `unit_plural` from your body when supplied, else looked up by the
-            printed short form.
+            Prefer `unit_key` for stating a unit; use this field for a wording
+            that has no key at all (a unit you type yourself), or simply send
+            back what you read. A **catalogue key** is still accepted here and
+            is resolved to the printed short form and plural **in the issuing
+            organisation's language**, so `piece` reads back as
+            `piece`/`pieces` for an English organisation and `Stück`/`""` for a
+            German one. **Anything else is taken verbatim** as printed text,
+            with `unit_plural` from your body when supplied, else looked up by
+            the printed short form.
 
 
             **So the value you read back is often not the value you sent.**
@@ -1336,9 +1394,9 @@ components:
       additionalProperties: true
       description: >-
         One entry of the fixed system unit catalogue. Read-only, and identical
-        for every organisation. `key` is what an ARTICLE's `unit` must be; the
-        per-language blocks are what a POSITION's `unit` is resolved to and
-        snapshotted as.
+        for every organisation. `key` is what an ARTICLE's `unit` must be and
+        what a POSITION's `unit_key` must be; the per-language blocks are what
+        a POSITION's `unit` is resolved to and snapshotted as.
       properties:
         id: { type: string, description: Same value as `key`. Present so the row has the `id` every entity here has. }
         key:
@@ -1358,16 +1416,21 @@ components:
       properties:
         short:
           type: string
-          description: The printed short form, e.g. "Stk." (de) or "pc." (en). This is what a position stores.
+          description: >-
+            The printed short form, e.g. "Stück" (de) or "piece" (en). This is
+            what a position stores in `unit`. **These wordings are not stable
+            across releases** - on 2026-08-16 "Std." became "Stunde" and "pc."
+            became "piece" - which is why a position also carries `unit_key`
+            and why an article stores the key rather than this.
         label:
           type: string
-          description: The long human name, e.g. "Stück" (de), "Piece" (en).
+          description: The long human name, e.g. "Stück" (de), "Piece" (en). Use it to label a picker.
         plural:
           type: string
           description: >-
-            The form printed once the quantity leaves 1, e.g. "pcs.". Empty
-            means the unit does not inflect ("8 h") and the short form prints
-            unchanged.
+            The form printed once the quantity leaves 1, e.g. "pieces". Empty
+            means the unit does not inflect ("25 kg") and the short form
+            prints unchanged.
 
     UnitList:
       allOf:
@@ -1967,7 +2030,14 @@ components:
         description: { type: string, nullable: true }
         price: { type: number, nullable: true, description: "Net unit price. 0 is a real price; null means inherit." }
         tax_percent: { type: number, nullable: true, description: "Percentage, e.g. 20. 0 is a real rate; null means inherit." }
-        unit: { type: string, nullable: true }
+        unit:
+          type: string
+          nullable: true
+          description: >-
+            Catalogue KEY overriding the article's own unit for lines built
+            from this variant, e.g. `piece`, `hour`. Same rule as an article's
+            `unit`: a printed short form is not a key and answers 422
+            `unit_unknown`. Empty means the variant inherits the article's.
         fibu_code: { type: string, nullable: true }
         # Nullability is `nullable: true`, the way every other nullable field in
         # this file expresses it - NOT a `null` member in the enum. Listing null
@@ -1993,7 +2063,14 @@ components:
         description: { type: string, nullable: true }
         price: { type: number, nullable: true }
         tax_percent: { type: number, nullable: true }
-        unit: { type: string, nullable: true }
+        unit:
+          type: string
+          nullable: true
+          description: >-
+            Catalogue KEY overriding the article's own unit for lines built
+            from this variant, e.g. `piece`, `hour`. Same rule as an article's
+            `unit`: a printed short form is not a key and answers 422
+            `unit_unknown`. Empty means the variant inherits the article's.
         fibu_code: { type: string, nullable: true }
         supply_type: { type: string, nullable: true }
         billing_mode: { type: string, nullable: true }

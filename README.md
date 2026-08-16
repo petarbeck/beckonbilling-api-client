@@ -119,7 +119,7 @@ A user token with exactly one organisation may omit it entirely.
 | `$client->customers` | Customers | `customers` |
 | `$client->articleCategories` | Article categories | `articles` |
 | `$client->articles` | Articles | `articles` |
-| `$client->units` | Units (read-only) | any document feature |
+| `$client->units` | Units (read-only) | none - any valid token |
 | `$client->documentTemplates` | Document templates (read-only) | `quotes` / `outbound_invoices` |
 | `$client->quotes` | Quotes | `quotes` |
 | `$client->outboundInvoices` | Outbound invoices | `outbound_invoices` |

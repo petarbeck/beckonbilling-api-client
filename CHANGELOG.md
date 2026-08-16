@@ -3,6 +3,121 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-08-16
+
+A position now carries `unit_key`, the catalogue key, alongside the printed
+`unit`. **Nothing breaks and nothing that passed is refused** - the field is
+additive, and `unit` behaves exactly as it did in 0.12.0. The reason to adopt it
+is in the second half of this entry: **the printed wordings changed earlier the
+same day**, so a client with `Std.` or `pc.` written into it is now showing
+something the document does not say.
+
+### Added
+
+- **`unit_key` on every position**, in and out, on quotes, outbound invoices and
+  recurring invoices alike. It is the catalogue key (`piece`, `hour`, `month`);
+  `unit` remains the printed wording snapshotted on that line.
+
+  It exists because a position stores TEXT and never a key, so until now a
+  client that READ a document had no way to see which unit a line actually was -
+  only how it happened to be spelled. Everyone therefore echoed the spelling,
+  which was fine exactly as long as the spellings never moved. They moved.
+
+  **Send `unit_key`.** Keys do not change; printed wordings do.
+
+- **Reading a document gives you `unit_key` too**, so echoing a document's own
+  positions is the stable thing to do. An empty value means **"this line has no
+  catalogue key"** - a unit somebody typed by hand, kept verbatim. It does not
+  mean "no unit"; that is still `unit: ""`.
+
+  A line that predates the catalogue resolves too: historic spellings such as
+  `Stk.`, `Std.`, `pc.` and `psch.` map back to their key, so the field is
+  populated on old documents rather than empty on nearly all of them.
+
+### Changed (values, not schema - nothing is refused that used to pass)
+
+- **The printed unit wordings were spelled out on 2026-08-16, and this contract
+  described the old ones.** `Std.` became `Stunde`, `Stk.` became `Stück`,
+  `Pkg.` became `Packung`, and in English `pc.`/`pcs.` became `piece`/`pieces`,
+  `h` became `hour`, `flat` became `flat rate`. Eight German and seven English
+  short forms in all; the measurement symbols (`kg`, `m`, `kWh`, `l`) are
+  unchanged.
+
+  So a statement this file made in 0.12.0 - "`piece` reads back as `pc.`/`pcs.`
+  for an English organisation and `Stk.`/`''` for a German one" - was already
+  untrue when you read it. It now reads back as `piece`/`pieces` and
+  `Stück`/`''`. Corrected in `openapi.yaml`, `AGENTS.md`, `llms.txt` and the
+  `Unit` model docblock.
+
+  **Nothing about this is refused, and no request shape changes** - it is what
+  gets PRINTED. But if you match on a printed form, compare a label, or have one
+  in a fixture, that is the code to look at, and `unit_key` is the field that
+  makes it unnecessary.
+
+- **How `unit_key` and `unit` combine, and the middle rule is the one to read.**
+
+  | `unit_key` | `unit` | result |
+  |---|---|---|
+  | `hour` | absent | printed in the organisation's language |
+  | `hour` | `Std.` (same unit) | `Std.` **kept verbatim** |
+  | `hour` | `Stk.` (different unit) | the key wins - a real change |
+  | `""` | `Kisterl` | `Kisterl` kept |
+  | `Fuhre` | anything | **422 `unit_unknown`** |
+
+  The second row is not a nicety. Without it, merely reading a document and
+  saving it back would rewrite an issued invoice from `Stk.` to `Stück` and put
+  it at odds with the PDF the customer already holds - on a snapshot field whose
+  entire purpose is that reprinting says what it said on the day. The key names
+  WHICH unit the line is; `unit` records HOW it was written on that document.
+
+  An unknown `unit_key` is refused, unlike an unknown `unit`. That is safe to
+  rely on rather than a repeat of the 0.9.0 mistake: the field is new, nothing
+  was sending it, and the server only ever emits `""` or a valid key, so an
+  echoing client cannot produce one.
+
+### Fixed (documentation only, no server change)
+
+Four places contradicted the API as it already behaved:
+
+- **`Resource\Units`'s docblock still described the 0.10.0 world** - "the
+  organisation's unit vocabulary", "anything else is ADOPTED into the
+  vocabulary", and a permission requirement. Units became a fixed system
+  catalogue needing no permission in 0.12.0; the docblock never followed.
+- **`AGENTS.md` listed `unit_too_long`** in the exception table and repeated the
+  adopted-into-the-vocabulary rule under Gotchas. Neither has existed since
+  0.12.0.
+- **`Model\Article`'s `unit` was described as a "short unit ... one of the
+  organisation's units"**. It is a catalogue key, and an unknown one answers
+  422 `unit_unknown`.
+- **`ArticleVariant.unit` and `ArticleVariantInput.unit` were undocumented**
+  in `openapi.yaml` - a bare `{ type: string, nullable: true }`. A variant's
+  unit is a KEY and overrides the article's, so a printed form there is refused
+  the same way. `README.md`'s permission column for `units` said "any document
+  feature"; it needs none.
+
+### Migration
+
+Nothing is required. To adopt the token:
+
+```diff
+ 'positions' => [[
+     'title'    => 'Consulting',
+     'quantity' => 3,
+-    'unit'     => 'Std.',
++    'unit_key' => 'hour',
+     'price'    => 120.0,
+ ]],
+```
+
+And when you round-trip a document, send back what you read - both fields - and
+the stored wording is preserved:
+
+```php
+$invoice = $client->outboundInvoices->get($id);
+$client->outboundInvoices->update($id, ['positions' => $invoice->positions]);
+// unit and unit_key both go back; the line is unchanged, byte for byte.
+```
+
 ## [0.12.0] - 2026-08-16
 
 Terms presets became document templates, units became a fixed system catalogue,

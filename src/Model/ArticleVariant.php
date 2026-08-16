@@ -27,7 +27,8 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $description
  * @property-read float|null  $price            Net unit price; null = inherit, 0 = a real price.
  * @property-read float|null  $tax_percent      Percentage, e.g. 20; null = inherit, 0 = a real rate.
- * @property-read string|null $unit
+ * @property-read string|null $unit              Catalogue KEY overriding the article's unit, e.g. "hour" - not a printed
+ *                                               form. Unknown answers 422 `unit_unknown`; '' inherits the article's.
  * @property-read string|null $fibu_code
  * @property-read string|null $supply_type         service|goods
  * @property-read string|null $billing_mode        one_time|recurring

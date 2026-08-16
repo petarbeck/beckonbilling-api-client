@@ -16,8 +16,9 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $description
  * @property-read float|null  $price             Net unit price.
  * @property-read float|null  $tax_percent       Tax percentage, e.g. 20.
- * @property-read string|null $unit              Default short unit for lines created from this article, e.g. "h", "Stk.".
- *                                               Must be one of the organisation's units - see `GET /units`.
+ * @property-read string|null $unit              Catalogue KEY for lines created from this article, e.g. "hour", "piece"
+ *                                               - not a printed form. An unknown one answers 422 `unit_unknown`;
+ *                                               see `GET /units`. '' means "no unit".
  * @property-read string|null $article_group_id  Category UUID.
  * @property-read string|null $group_label       That category's name, resolved server-side; '' when uncategorised.
  * @property-read string|null $fibu_code         Revenue/ledger account for the export.

@@ -236,7 +236,7 @@ language, the printed forms.
 ```php
 foreach ($client->units->autoPaging() as $unit) {
     echo $unit->key, ' ', $unit->de['short'], ' ', $unit->en['short'], "\n";
-    // piece  Stk.  pc.
+    // piece  Stück  piece
 }
 ```
 
@@ -250,17 +250,38 @@ that bites:
 | | what to send | unknown value |
 |---|---|---|
 | **article** `unit` | the `key` (`piece`, `hour`, `month`) | **422 `unit_unknown`** |
+| **position** `unit_key` | the `key` | **422 `unit_unknown`** |
 | **position** `unit` | a `key`, or any printed text | never refused |
 
 - **An article's `unit` is validated**, matched exactly and lowercase. A printed
   short form is not a key, so `Stk.`, `h` and `pc.` are all refused. Omitting it
   on create stores `piece`; an explicit `''` stores "no unit".
-- **A position's `unit` is resolved and snapshotted as TEXT.** Send a key and you
-  read back the printed short form and plural *in the issuing organisation's
-  language* - `piece` becomes `pc.`/`pcs.` for an English organisation and
-  `Stk.`/`''` for a German one. Send anything else and it is stored verbatim.
-  So **the value you read back is often not the value you sent**; that is by
-  design, and sending the resolved value back is stable.
+- **On a position, send `unit_key`.** The printed wordings move - on 2026-08-16
+  `Std.` became `Stunde` and `pc.` became `piece` - and the keys do not. Every
+  position you read back carries `unit_key`, so echoing a document's own
+  positions is stable.
+- **`unit` is the printed wording snapshotted on that line**, and it is still
+  never refused. A key in it is resolved *in the issuing organisation's
+  language* - `piece` becomes `piece`/`pieces` for an English organisation and
+  `Stück`/`''` for a German one - and anything else is stored verbatim. So
+  **the value you read back is often not the value you sent**; that is by
+  design.
+
+**When you send both, and they name the same unit, the stored wording wins.**
+That is the rule to understand:
+
+| `unit_key` | `unit` | result |
+|---|---|---|
+| `hour` | absent | printed in the organisation's language |
+| `hour` | `Std.` (same unit) | `Std.` **kept verbatim** |
+| `hour` | `Stk.` (different unit) | the key wins - a real change |
+| `''` | `Kisterl` | `Kisterl` kept - no catalogue key for this line |
+| `Fuhre` | anything | **422 `unit_unknown`** |
+
+Without the second row, merely reading a document and saving it back would
+rewrite an issued invoice from `Stk.` to `Stück` and put it at odds with the PDF
+the customer already holds. An empty `unit_key` means "no catalogue key for this
+line", never "no unit" - that is still `unit: ''`.
 
 There is no `unit_too_long` refusal any more, and no length limit.
 
@@ -374,7 +395,7 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `PermissionException` | 403 | `missing_permission`, `send_not_permitted`, `bank_not_permitted` |
 | `NotFoundException` | 404 | absent or foreign-organisation |
 | `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked) |
-| `ValidationException` | 400/422 | rejected payload (`unit_too_long`, `unrecognised_keys`, `article_not_found`) |
+| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`) |
 | `RateLimitException` | 429 | back off |
 | `ServerException` | 5xx | retryable |
 | `TransportException` | 0 | network failure; original PSR-18 error is `->getPrevious()` |
@@ -524,13 +545,13 @@ $client->recurringInvoices->create([
 - A position may name a catalog **variant** with `article_variant_id`; the
   server then takes that variant's resolved values and snapshots its name into
   `variant_label`. Send the id and leave the label empty.
-- Positions carry `unit` and `unit_plural`. Send a system unit KEY (`piece`,
-  `hour`, `month` - see Units above) and leave `unit_plural` empty; the server
-  resolves both into printed TEXT in the issuing organisation's language and
-  snapshots them, so a position stores `pc.`, never `piece`. Anything that is
-  not a key is taken verbatim. Nothing here is ever refused, and **what you read
-  back is often not what you sent**. An empty plural means the unit does not
-  inflect (`8 h`).
+- Positions carry `unit_key`, `unit` and `unit_plural`. Send the system unit
+  KEY in **`unit_key`** (`piece`, `hour`, `month` - see Units above) and leave
+  the other two empty; the server resolves them into printed TEXT in the issuing
+  organisation's language and snapshots them, so a position stores `Stück`,
+  never `piece`. `unit` on its own still works exactly as before and is never
+  refused, so **what you read back is often not what you sent**. An empty plural
+  means the unit does not inflect (`25 kg`).
 - **Every document carries TWO terms texts: `terms_text` and
   `payment_terms_text`**, both snapshotted from the selected or default document
   template at creation, and both printed - `terms_text` first. Editing or
@@ -627,9 +648,9 @@ $client->recurringInvoices->create([
   sub-collection of an article); suppliers, projects, inbound invoices,
   banking, etc. are portal-internal and not reachable with a token.
 - **Creating answers 201**, not 200. Everything else answers 200.
-- A `unit` the organisation does not stock is ADDED to its vocabulary, and what
-  comes back is the vocabulary's spelling (`stk.` reads back as `Stk.`) - pick from
-  `$client->units`. See the Units section for the two ways this surprises you.
+- A position's `unit` is resolved on the way in, so what comes back is often
+  not what you sent (`piece` reads back as `Stück`). Send `unit_key` instead and
+  echo what you read - see the Units section for the full table.
 - `quotes->send()` answers an envelope on the wire, not a bare quote (the client
   unwraps it); `outboundInvoices->cancel()` answers the CREDIT NOTE, not the
   invoice you cancelled.
