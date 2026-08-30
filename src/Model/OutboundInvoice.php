@@ -29,7 +29,10 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $due_date          ISO YYYY-MM-DD.
  * @property-read int|null    $due_days          Payment term in calendar days, DERIVED as due_date - issue_date.
  *                                               Null while either date is unset. Writable as an input.
- * @property-read string|null $project_id
+ * @property-read string|null $order_id          Uuid of the order (Auftrag) this invoice was drafted from, or
+ *                                               null. Replaced `project_id` on 2026-08-28; a client still
+ *                                               reading or writing `project_id` here loses the value silently,
+ *                                               since the API neither reads nor emits that key any more.
  * @property-read string|null $payment_mode      "direct_debit" | "all" | "individual".
  * @property-read array|null  $payment_methods   Selection used when payment_mode is "individual".
  * @property-read array|null  $payment_methods_effective  The RESOLVED ways to pay this document: empty for

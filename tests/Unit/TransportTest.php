@@ -6,6 +6,7 @@ namespace BeckonBilling\ApiClient\Tests\Unit;
 
 use BeckonBilling\ApiClient\Exception\AuthenticationException;
 use BeckonBilling\ApiClient\Exception\ConflictException;
+use BeckonBilling\ApiClient\Exception\GoneException;
 use BeckonBilling\ApiClient\Exception\NotFoundException;
 use BeckonBilling\ApiClient\Exception\PermissionException;
 use BeckonBilling\ApiClient\Exception\ServerException;
@@ -98,6 +99,7 @@ final class TransportTest extends ClientTestCase
             403 => PermissionException::class,
             404 => NotFoundException::class,
             409 => ConflictException::class,
+            410 => GoneException::class,
             422 => ValidationException::class,
             500 => ServerException::class,
         ];

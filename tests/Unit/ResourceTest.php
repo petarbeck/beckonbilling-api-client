@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace BeckonBilling\ApiClient\Tests\Unit;
 
 use BeckonBilling\ApiClient\Collection;
+use BeckonBilling\ApiClient\Exception\ConflictException;
+use BeckonBilling\ApiClient\Exception\GoneException;
+use BeckonBilling\ApiClient\Exception\ValidationException;
 use BeckonBilling\ApiClient\Model\ArticleVariant;
 use BeckonBilling\ApiClient\Model\Customer;
 use BeckonBilling\ApiClient\Model\DocumentTemplate;
@@ -79,13 +82,12 @@ final class ResourceTest extends ClientTestCase
         $this->assertSame('DELETE', $http->lastRequest()->getMethod());
     }
 
-    public function testQuoteIssueSendConvertPdf(): void
+    public function testQuoteIssueSendPdf(): void
     {
         $http = (new MockHttpClient())
             ->push(200, ['id' => 'q1', 'status' => 'issued'])
             // The send response is an ENVELOPE, which is what the API really sends.
             ->push(200, ['sent_to' => 'kunde@example.com', 'quote' => ['id' => 'q1', 'status' => 'issued']])
-            ->push(201, ['outbound_invoice_id' => 'inv9', 'quote' => ['id' => 'q1', 'status' => 'converted']])
             ->push(200, '%PDF-quote', ['Content-Type' => 'application/pdf']);
 
         $client = $this->makeClient($http);
@@ -98,48 +100,41 @@ final class ResourceTest extends ClientTestCase
         $this->assertStringEndsWith('/send', explode('?', (string) $http->requests[1]->getUri())[0]);
         $this->assertSame(['document_ids' => ['d1']], $this->bodyOf($http->requests[1]));
 
-        $result = $client->quotes->convert('q1');
-        $this->assertSame('inv9', $result['outbound_invoice_id']);
-        $this->assertInstanceOf(Quote::class, $result['quote']);
-
         $pdf = $client->quotes->pdf('q1');
         $this->assertSame('%PDF-quote', $pdf);
     }
 
     /**
-     * The API answers `outbound_invoice_id`; this method read `invoice_id`, a
-     * key it has never sent, so a successful conversion handed back null. The
-     * old key is kept as an alias, now carrying the real value.
+     * `POST /quotes/{id}/convert` was retired on 2026-08-28 and now answers
+     * 410 `quote_conversion_moved` on every call - a won quote becomes an
+     * order, and the order is what gets invoiced, through a route this API
+     * does not expose yet. The client method is kept (deprecated) rather than
+     * removed, but it must fail LOCALLY with a typed, catchable exception -
+     * never spend a request on a call that can only ever be refused, and
+     * never let a raw error escape uncategorised.
      */
-    public function testConvertReadsTheKeyTheApiActuallySends(): void
+    public function testConvertIsRetiredAndThrowsLocallyWithoutARequest(): void
     {
-        $http = (new MockHttpClient())
-            ->push(201, ['outbound_invoice_id' => 'inv9', 'quote' => ['id' => 'q1']]);
-
-        $result = $this->makeClient($http)->quotes->convert('q1');
-
-        $this->assertSame('inv9', $result['outbound_invoice_id']);
-        $this->assertSame('inv9', $result['invoice_id'], 'the deprecated alias must carry the real id');
-    }
-
-    /**
-     * A staged conversion has to reach the wire as `scope`, and the default has
-     * to stay "no body at all" - a quote converted without a scope must keep
-     * billing the whole amount exactly as before.
-     */
-    public function testConvertSendsTheScopeAndOmitsItByDefault(): void
-    {
-        $http = (new MockHttpClient())
-            ->push(201, ['outbound_invoice_id' => 'inv1', 'quote' => ['id' => 'q1']])
-            ->push(201, ['outbound_invoice_id' => 'inv2', 'quote' => ['id' => 'q1']]);
-
+        $http = new MockHttpClient();
         $client = $this->makeClient($http);
 
-        $client->quotes->convert('q1');
-        $this->assertSame([], $this->bodyOf($http->requests[0]), 'no scope must post no body');
+        try {
+            $client->quotes->convert('q1');
+            $this->fail('convert() must throw now that the route is retired');
+        } catch (GoneException $e) {
+            $this->assertSame(410, $e->getStatusCode());
+            $this->assertSame('quote_conversion_moved', $e->getErrorKey());
+        }
 
-        $client->quotes->convert('q1', 'deposit');
-        $this->assertSame(['scope' => 'deposit'], $this->bodyOf($http->requests[1]));
+        // A scope argument changes nothing - every call is refused the same way.
+        try {
+            $client->quotes->convert('q1', 'deposit');
+            $this->fail('convert() must throw regardless of scope');
+        } catch (GoneException $e) {
+            $this->assertSame('quote_conversion_moved', $e->getErrorKey());
+        }
+
+        $this->assertSame([], $http->requests, 'no request may leave the client for a retired route');
     }
 
     /**
@@ -337,5 +332,126 @@ final class ResourceTest extends ClientTestCase
         $this->assertSame('PUT', $http->requests[2]->getMethod());
         $this->assertStringEndsWith('/articles/a1/variants/v1', explode('?', (string) $http->requests[2]->getUri())[0]);
         $this->assertSame(['price' => null], $this->bodyOf($http->requests[2]));
+    }
+
+    /**
+     * `PUT {status: 'lost'}` without `lost_reason` was silently accepted until
+     * 2026-08-29; it now answers 422 `lost_reason_required` and writes nothing.
+     * A caller must send one of the four reasons in the same request.
+     */
+    public function testLosingAQuoteWithoutAReasonIsRefused(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(422, ['error' => ['code' => 422, 'message' => 'A reason is required.', 'key' => 'lost_reason_required']]);
+
+        try {
+            $this->makeClient($http)->quotes->update('q1', ['status' => 'lost']);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame('lost_reason_required', $e->getErrorKey());
+        }
+
+        $this->assertSame(['status' => 'lost'], $this->bodyOf($http->lastRequest()));
+    }
+
+    /**
+     * With a valid reason the same call goes through, and the reason is
+     * readable back on the model.
+     */
+    public function testLosingAQuoteWithAReasonSucceeds(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(200, ['id' => 'q1', 'status' => 'lost', 'lost_reason' => 'price']);
+
+        $quote = $this->makeClient($http)->quotes->update('q1', ['status' => 'lost', 'lost_reason' => 'price']);
+
+        $this->assertSame('lost', $quote->status);
+        $this->assertSame('price', $quote->lost_reason);
+        $this->assertSame(['status' => 'lost', 'lost_reason' => 'price'], $this->bodyOf($http->lastRequest()));
+    }
+
+    /**
+     * Marking a quote won can create an order and send its confirmation; the
+     * response then carries `order_confirmation` alongside the quote itself.
+     */
+    public function testWinningAQuoteCanReportAnOrderConfirmation(): void
+    {
+        $http = (new MockHttpClient())->push(200, [
+            'id' => 'q1',
+            'status' => 'won',
+            'order' => ['id' => 'o1', 'label' => 'Website relaunch', 'public_index' => 'A-2026-0007'],
+            'order_confirmation' => ['sent' => true, 'error' => ''],
+        ]);
+
+        $quote = $this->makeClient($http)->quotes->update('q1', ['status' => 'won']);
+
+        $this->assertSame('won', $quote->status);
+        $this->assertSame('o1', $quote->order['id']);
+        $this->assertSame('A-2026-0007', $quote->order['public_index']);
+        $this->assertTrue($quote->order_confirmation['sent']);
+    }
+
+    /**
+     * A quote is immutable once issued (409 `quote_issued_locked`) or closed
+     * (409 `quote_closed_locked`), and only a draft can still be deleted (409
+     * `quote_closed_undeletable`) - all three surface as ConflictException,
+     * exactly like any other 409 this client already maps.
+     */
+    public function testClosedQuoteLocksSurfaceAsConflictException(): void
+    {
+        $cases = [
+            'quote_issued_locked' => 'This quote has already been issued.',
+            'quote_closed_locked' => 'This quote has already been won.',
+        ];
+        foreach ($cases as $key => $message) {
+            $http = (new MockHttpClient())
+                ->push(409, ['error' => ['code' => 409, 'message' => $message, 'key' => $key]]);
+            try {
+                $this->makeClient($http)->quotes->update('q1', ['terms_text' => 'New wording']);
+                $this->fail("Expected ConflictException for $key");
+            } catch (ConflictException $e) {
+                $this->assertSame($key, $e->getErrorKey());
+            }
+        }
+
+        $http = (new MockHttpClient())
+            ->push(409, ['error' => ['code' => 409, 'message' => 'Only a draft can be deleted.', 'key' => 'quote_closed_undeletable']]);
+        try {
+            $this->makeClient($http)->quotes->delete('q1');
+            $this->fail('Expected ConflictException for quote_closed_undeletable');
+        } catch (ConflictException $e) {
+            $this->assertSame('quote_closed_undeletable', $e->getErrorKey());
+        }
+    }
+
+    /**
+     * `version` only advances by issuing a revision in the portal; sending a
+     * value below the quote's current one is refused rather than silently
+     * hiding a revision that already went out.
+     */
+    public function testSendingAnOlderVersionIsRefused(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(422, ['error' => ['code' => 422, 'message' => 'The quote version cannot move backwards.', 'key' => 'quote_version_backwards']]);
+
+        try {
+            $this->makeClient($http)->quotes->update('q1', ['version' => 1]);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame('quote_version_backwards', $e->getErrorKey());
+        }
+    }
+
+    /**
+     * `OutboundInvoice.order_id` replaced `project_id` on 2026-08-28. This is
+     * just the read side of the rename - the API neither reads nor emits
+     * `project_id` on this entity any more.
+     */
+    public function testOutboundInvoiceExposesOrderIdInPlaceOfProjectId(): void
+    {
+        $http = (new MockHttpClient())->push(200, ['id' => 'inv1', 'order_id' => 'o1']);
+        $invoice = $this->makeClient($http)->outboundInvoices->get('inv1');
+
+        $this->assertSame('o1', $invoice->order_id);
     }
 }

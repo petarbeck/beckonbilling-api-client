@@ -72,6 +72,7 @@ class ApiException extends \RuntimeException
             $status === 403 => PermissionException::class,
             $status === 404 => NotFoundException::class,
             $status === 409 => ConflictException::class,
+            $status === 410 => GoneException::class,
             $status === 422, $status === 400 => ValidationException::class,
             $status === 429 => RateLimitException::class,
             $status >= 500 => ServerException::class,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace BeckonBilling\ApiClient\Resource;
 
+use BeckonBilling\ApiClient\Exception\GoneException;
 use BeckonBilling\ApiClient\Model\Quote;
 
 /**
@@ -81,48 +82,39 @@ final class Quotes extends AbstractResource
     }
 
     /**
-     * Create a draft invoice from the quote. Requires `quotes` Full and
-     * `outbound_invoices` Full.
+     * @deprecated Since 0.14.0. The route this called, `POST
+     * /quotes/{id}/convert`, was retired on 2026-08-28 and now answers 410
+     * `quote_conversion_moved` on every call - a won quote becomes an ORDER
+     * first, and the order is what gets invoiced. That order is not reachable
+     * through this API yet, so there is no direct replacement call here; the
+     * portal is the only place to take a won quote to invoice right now.
      *
-     * The API answers 201 with **`outbound_invoice_id`**. This method read
-     * `invoice_id` until 0.9.0 - a key the API has never sent - so the id came
-     * back null on every successful conversion. `invoice_id` is still returned
-     * as an alias so nothing that read it breaks, but it now carries the real
-     * value; prefer `outbound_invoice_id`.
+     * This method is kept, rather than removed, so an existing call site
+     * fails with a clear, catchable, on-topic exception instead of a fatal
+     * "call to undefined method" - the same reasoning
+     * {@see \BeckonBilling\ApiClient\Resource\ReadOnlyResource} uses for
+     * `create`/`update`/`delete` on a read-only collection. It throws
+     * LOCALLY, without a request, because the outcome is already known for
+     * every input: unlike a read-only collection's 405 (a property of the
+     * resource, so `\LogicException` fits), this is a specific, versioned API
+     * state with a stable `error.key` a caller may already branch on - so it
+     * is raised as a {@see \BeckonBilling\ApiClient\Exception\GoneException},
+     * an `ApiException` a `catch (ApiException $e) { match ($e->getErrorKey())
+     * ... }` block handles exactly as if the server had answered it.
      *
-     * **`$scope` decides WHICH invoice this creates**: `null` (or `'full'`)
-     * bills the whole one-time part, as this method always did; `'deposit'`
-     * bills only the quote's down payment; `'final'` bills the remainder,
-     * deducting an already-issued down payment. Anything else is refused by the
-     * server with 422 `invoice_scope_unknown` rather than coerced - falling back
-     * to the full amount would silently bill everything.
-     *
-     * The scope is a string parameter rather than an options/data array on
-     * purpose: a call that used to read `convert($id, ['organisation' => ...])`
-     * fails LOUDLY with a TypeError instead of quietly posting the options as a
-     * body and losing the organisation scope. Pass options third.
-     *
-     * @param array<string,mixed> $options
-     * @return array{outbound_invoice_id: ?string, invoice_id: ?string, quote: ?Quote}
+     * @param array<string,mixed> $options Unused; kept for signature compatibility.
+     * @throws GoneException Always - this method never returns normally.
      */
     public function convert(string $id, ?string $scope = null, array $options = []): array
     {
-        if (null !== $scope) {
-            $options['json'] = ['scope' => $scope];
-        }
-
-        $response = $this->transport->request('POST', $this->itemPath($id) . '/convert', $options);
-        $quote = is_array($response['quote'] ?? null) ? new Quote($response['quote']) : null;
-
-        $invoiceId = $response['outbound_invoice_id'] ?? $response['invoice_id'] ?? null;
-        $invoiceId = null === $invoiceId ? null : (string) $invoiceId;
-
-        return [
-            'outbound_invoice_id' => $invoiceId,
-            // Deprecated alias, kept so an existing caller keeps working.
-            'invoice_id' => $invoiceId,
-            'quote' => $quote,
-        ];
+        throw new GoneException(
+            'POST /quotes/{id}/convert was retired on 2026-08-28 and now answers 410 on every '
+            . 'call. A won quote becomes an order, and the order is what gets invoiced - there is '
+            . 'no /api/v1 route for orders yet, so this client has no replacement call to make. '
+            . 'Use the portal to invoice a won quote until an order route ships.',
+            410,
+            'quote_conversion_moved'
+        );
     }
 
     /**

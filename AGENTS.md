@@ -14,6 +14,14 @@ categories, articles, quotes, outbound invoices, recurring invoices) and two
 read-only (units, document templates) - plus user-token auth. It holds no secrets; a
 valid API token is required to do anything.
 
+**Known gap (since 2026-08-28): a won quote cannot be invoiced through this
+API.** The portal turns a won quote into an **order** first, and the order is
+what gets invoiced (`POST /quotes/{id}/convert` was retired, 410
+`quote_conversion_moved`); `/api/v1` does not expose an order endpoint yet. A
+consumer that used to run quote -> invoice through this client has no
+replacement call here - see `Quotes::convert()` and the "Quote actions"
+section below.
+
 ## Install
 
 ```bash
@@ -116,9 +124,37 @@ Resource properties and their models:
 ->issue(string $id, array $options = []): Quote            // assign number
 ->send(string $id, array $data = [], array $options = []): Quote   // email PDF; needs `send`; $data may hold 'document_ids'
 ->sendResult(string $id, array $data = [], array $options = []): array // ['sent_to','quote','detached_positions']
-->convert(string $id, ?string $scope = null, array $options = []): array // ['outbound_invoice_id'=>?string,'quote'=>?Quote]; needs outbound_invoices Full
+->convert(string $id, ?string $scope = null, array $options = []): array // deprecated, throws GoneException - see below
 ->pdf(string $id, array $options = []): string             // raw PDF bytes (409 for drafts)
 ```
+
+**A quote is immutable once it is issued (2026-08-28).** A `PUT` that carries
+a content key (a position, a text, the recipient, ...) against an `issued`
+quote is refused with 409 `quote_issued_locked` - build a new revision in the
+portal instead. Against a `won` or `converted` quote it is refused with 409
+`quote_closed_locked`, unconditionally. A PURE outcome change (`{status: 'won'
+| 'lost', ...}` with no content key alongside it) on an `issued` quote is not
+content and still goes through with 200 - the lock is on the content, not the
+document. `version` only moves forward: sending one below the quote's current
+value is refused with 422 `quote_version_backwards` rather than silently
+hiding a revision that already went out. **Only a `draft` can still be
+deleted** - `delete()` on anything else is refused with 409
+`quote_closed_undeletable`; withdraw an issued quote by marking it lost.
+
+**Setting `status: 'lost'` requires a reason (2026-08-29).**
+`update($id, ['status' => 'lost'])` alone is refused with 422
+`lost_reason_required`; send `lost_reason` in the same call, one of `price`,
+`timing`, `competitor`, `no_need` (`Quote::LOST_REASONS` has no client-side
+constant yet - use the literal strings). Nothing is written, including the
+status itself, until a valid reason is present.
+
+**Setting `status: 'won'` can create an order and its confirmation.** The
+resulting `Quote` may then carry `order` (`{id, label, public_index}`, replacing
+a bare `has_order` bit since 2026-08-28) and the `update()` response may carry
+`order_confirmation` (`{sent: bool, error: string}`) describing whether that
+mail went out. **This API has no order endpoint yet** - `order` tells you one
+exists and names it; it does not let you read, invoice or otherwise act on it
+through this client. Use the portal for that until an order route ships.
 
 **A quote can be addressed to something other than a customer.** Pass
 `recipient_kind` (`customer` | `lead` | `supplier` | `partner`) together with
@@ -127,7 +163,7 @@ that record and `customer_id` is cleared. `lead` is QUOTE-ONLY - an outbound
 invoice accepts only `customer`, `supplier` and `partner`, because an invoice
 always names a customer.
 
-Three rules worth knowing before you build on it:
+Two rules worth knowing before you build on it:
 
 - A kind the document does not accept is **refused** with 422
   `recipient_kind_invalid`. It is never silently ignored - doing so produced a
@@ -135,16 +171,27 @@ Three rules worth knowing before you build on it:
   exists to prevent.
 - Unknown and foreign `recipient_ref_id` answer identically with 404
   `recipient_not_found`. Two different answers would be an existence oracle.
-- `POST /quotes/{id}/convert` on a LEAD-addressed quote is refused with 409
-  `quote_recipient_is_lead` unless that lead has already been completed into a
-  customer (`POST /leads/{id}/complete`). The conversion then binds the invoice
-  to that customer and keeps the quote's recipient snapshot.
 
 `send` is the one quote action whose HTTP body is an ENVELOPE (`{sent_to,
 quote}`) rather than a bare quote; `send()` unwraps it for you and
 `sendResult()` hands you the whole thing. A quote with no recipient address and
 no customer to fall back on is 422 `recipient_email_missing`; a mail failure is
 502 `mail_send_failed` - unlike an invoice issue, which sends best-effort.
+Re-sending reopens a **lost** quote back to `issued`, but a **won** one refuses
+re-sending outright with 409 `quote_won_not_reopenable`, since an order may
+already depend on its exact content - this corrects a claim this file made
+until 2026-08-30, which said both statuses reopened the same way.
+
+**`convert()` is deprecated and now always throws `GoneException`.** `POST
+/quotes/{id}/convert` was retired on 2026-08-28 with no deprecation window - a
+won quote becomes an order first, and the order is what gets invoiced, on a
+route this API does not expose. The method is kept rather than removed so an
+existing call site gets a clear, catchable, on-topic exception (status 410,
+`error.key = quote_conversion_moved`) instead of a fatal "call to undefined
+method" - it throws locally, without a request, the same way
+`ReadOnlyResource` refuses a write without spending a round trip on a
+guaranteed 405. **There is no replacement call on this API**: invoicing a won
+quote is portal-only until an order endpoint ships.
 
 ### Outbound-invoice actions (`$client->outboundInvoices`)
 
@@ -394,8 +441,9 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `AuthenticationException` | 401 | bad/expired token; `tfa_required` on login |
 | `PermissionException` | 403 | `missing_permission`, `send_not_permitted`, `bank_not_permitted` |
 | `NotFoundException` | 404 | absent or foreign-organisation |
-| `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked) |
-| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`) |
+| `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked, `quote_issued_locked`/`quote_closed_locked`/`quote_closed_undeletable`/`quote_won_not_reopenable`) |
+| `GoneException` | 410 | a route retired for good, e.g. `quote_conversion_moved` (thrown locally by `quotes->convert()`, without a request) |
+| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`, `lost_reason_required`, `quote_version_backwards`) |
 | `RateLimitException` | 429 | back off |
 | `ServerException` | 5xx | retryable |
 | `TransportException` | 0 | network failure; original PSR-18 error is `->getPrevious()` |
@@ -442,11 +490,12 @@ $issued = $client->outboundInvoices->issue($invoice->id()); // needs `send`
 if ($issued->send_error) { /* mailing failed, invoice still issued */ }
 $client->outboundInvoices->setPaid($issued->id(), true);     // needs `bank`
 
-// Quote -> convert to invoice
-$quote  = $client->quotes->create(['customer_id' => $customerId, 'positions' => [/* ... */]]);
+// Quote -> won. There is no v1 call from here to an invoice any more (see
+// `convert()` above) - a won quote becomes an order, and invoicing it is a
+// portal/MCP action until this API grows an order route.
+$quote = $client->quotes->create(['customer_id' => $customerId, 'positions' => [/* ... */]]);
 $client->quotes->issue($quote->id());
-$result = $client->quotes->convert($quote->id());            // needs outbound_invoices Full
-$newInvoiceId = $result['outbound_invoice_id'];
+$client->quotes->update($quote->id(), ['status' => 'won']);
 
 // Recurring template (generated automatically by the portal's agent)
 $client->recurringInvoices->create([
@@ -483,16 +532,17 @@ $client->recurringInvoices->create([
   discount, and the tax applies to the discounted net.
 - **`billing_mode`** (`one_time` | `recurring`, plus `recurring_interval`) marks
   a line as a repeating fee. On a quote this splits the printed summary per
-  modality instead of adding a one-off charge to a monthly one. Converting such a
-  quote produces an invoice for the one-time lines AND a recurring invoice per
-  interval - but `POST /quotes/{id}/convert` creates only the invoice, so an
-  all-recurring quote is refused with 409 `quote_is_recurring_only`.
-- `POST /quotes/{id}/convert` answers **201** with **`outbound_invoice_id`**.
-- **A quote can be billed in STAGES**, and the money only adds up if you know
-  how. `convert()` takes a `$scope`: `null`/`'full'` bills the whole one-time
-  part as it always did, `'deposit'` bills the quote's down payment, `'final'`
-  bills the remainder. An unknown value is 422 `invoice_scope_unknown` - refused,
-  not coerced, because falling back to `full` would silently bill everything.
+  modality instead of adding a one-off charge to a monthly one. There is no
+  longer a v1 call that turns a quote into invoices at all (see `convert()`
+  above) - this field still describes how a quote's lines print, but acting on
+  it (producing a one-time invoice and a recurring template) is portal/MCP-only
+  now.
+- **A quote can be billed in STAGES** (deposit, then a final invoice deducting
+  it) - this used to be `convert()`'s `$scope` parameter (`full` / `deposit` /
+  `final`, 422 `invoice_scope_unknown` for anything else). **That call is
+  retired and this API has no successor for it** - a staged invoice can only
+  be created in the portal (or, once it exists, through an order route) today.
+  What still applies is reading one that already exists:
   - Each invoice reports which part it is in **`invoice_scope`**
     (`full` | `deposit` | `final`). Everything not created as a staged invoice
     says `full`, including every invoice older than the field.
@@ -639,14 +689,21 @@ $client->recurringInvoices->create([
 
 - Downloading a **draft** PDF 409s - issue it first.
 - **Deleting** an issued invoice 409s - `cancel()` it (creates a credit note).
+- **Deleting a non-draft quote** 409s too (`quote_closed_undeletable`, since
+  2026-08-28) - before this it deleted outright, even a won and signed one.
+- **`update()`ing content on an issued/won/converted quote** 409s
+  (`quote_issued_locked` / `quote_closed_locked`) - a pure `status` change to
+  `won`/`lost` on an `issued` quote is the one exception.
+- `quotes->convert()` always throws `GoneException` now - it never sends a
+  request. See "Quote actions" above.
 - `setPaid($id, false)` 409s while transaction-linked payments exist.
 - Recurring invoices have **no generate endpoint**. The portal's automation
   agent creates invoices from them, once a day at 08:00 in the ORGANISATION's
   own timezone - so a poller watching `next_run_at` sees a per-organisation
   local schedule, not one fixed UTC hour.
 - Only these eight entities are on `/api/v1` (plus article variants, as a
-  sub-collection of an article); suppliers, projects, inbound invoices,
-  banking, etc. are portal-internal and not reachable with a token.
+  sub-collection of an article); suppliers, **orders**, projects, inbound
+  invoices, banking, etc. are portal-internal and not reachable with a token.
 - **Creating answers 201**, not 200. Everything else answers 200.
 - A position's `unit` is resolved on the way in, so what comes back is often
   not what you sent (`piece` reads back as `Stück`). Send `unit_key` instead and

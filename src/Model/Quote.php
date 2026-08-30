@@ -7,6 +7,16 @@ namespace BeckonBilling\ApiClient\Model;
 /**
  * A quote (`/api/v1/quotes`). Lifecycle: draft -> issued -> won | lost | converted.
  *
+ * **Since 2026-08-28, a quote is immutable once issued.** A PUT that carries
+ * content against an `issued` quote is refused (409 `quote_issued_locked`);
+ * against `won`/`converted` it is refused too (409 `quote_closed_locked`).
+ * Wanting to change an issued quote means issuing a new revision in the
+ * portal instead, which is what `$version` then tracks (see there). A `lost`
+ * quote is the one exception that reopens: it goes back to `issued` on
+ * re-send, but a `won` one refuses re-sending outright (409
+ * `quote_won_not_reopenable`) since an order may already depend on it. Only a
+ * `draft` can still be deleted (409 `quote_closed_undeletable` otherwise).
+ *
  * @property-read string      $id
  * @property-read string|null $organisation_id  Uuid of the owning organisation. Matters with a USER token,
  *                                              which may span several organisations.
@@ -15,6 +25,12 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $public_index    Document number (opaque; e.g. "2607-1000-2").
  * @property-read int|null    $version         1..99.
  * @property-read string|null $status          "draft" | "issued" | "won" | "lost" | "converted".
+ * @property-read bool|null   $revising        Derived: true while a new revision is being worked on above
+ *                                             the last ISSUED version - that issued one is still what the
+ *                                             public page and any download show.
+ * @property-read string|null $lost_reason     "" | "price" | "timing" | "competitor" | "no_need". Required as
+ *                                             an input when status moves to "lost" (422 lost_reason_required
+ *                                             otherwise); "" on any quote not currently lost.
  * @property-read string|null $customer_id
  * @property-read array|null  $recipient
  * @property-read array|null  $positions       Line items.
@@ -22,7 +38,9 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $email_text      Email cover text. Also emitted as `intro_text` (legacy alias).
  * @property-read string|null $intro_text      Legacy alias of email_text.
  * @property-read string|null $pdf_footer      Printed footer. Was `footer_comment`, which is no longer emitted.
- * @property-read string|null $project_id
+ * @property-read array|null  $order           {id, label, public_index} of the order (Auftrag) this quote
+ *                                             became once it was won, or null. Replaced a boolean `has_order`
+ *                                             on 2026-08-28. Not itself reachable through this API yet.
  * @property-read string|null $partner_id
  * @property-read array|null  $document_ids    Attached document UUIDs.
  * @property-read string|null $document_send_mode "link" | "attach".

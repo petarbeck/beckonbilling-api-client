@@ -3,6 +3,146 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-08-30
+
+The portal rebuilt how a quote is won: it is now immutable once issued, a
+change requires issuing a new revision, "lost" requires a reason, and "won"
+turns the quote into an order rather than an invoice directly. **The one thing
+to read before anything else: `POST /quotes/{id}/convert` is retired outright,
+and this API cannot yet do what it did.** Several other things break with it,
+listed below - the owner approved a breaking minor for a 0.x package rather
+than shipping a quiet no-op.
+
+### Removed (BREAKING)
+
+- **`POST /quotes/{id}/convert` is retired and now answers 410
+  `quote_conversion_moved` on every call, with no deprecation window.** A won
+  quote becomes an **order** first (a portal entity this API does not expose),
+  and the order is what gets invoiced - not the quote. There is no `/api/v1`
+  route for that yet.
+
+  **`Quotes::convert()` is kept, marked `@deprecated`, and now throws
+  `GoneException` LOCALLY, without a request** - the same reasoning
+  `ReadOnlyResource` already uses for a write on a read-only collection: the
+  outcome is known for every input, so it is refused here rather than spent on
+  a guaranteed 410. `getErrorKey()` still returns `quote_conversion_moved`, so
+  existing `catch (ApiException $e) { match ($e->getErrorKey()) ... }` code
+  branches on it exactly as if the server had answered. The method was not
+  removed outright so a call site fails with a clear, on-topic exception
+  instead of a fatal "call to undefined method".
+
+  **There is no replacement call on this API.** Invoicing a won quote,
+  including a staged deposit/final invoice, is portal/MCP-only until an order
+  endpoint ships. If your integration converted quotes to invoices through
+  this client, it has no path forward here today - track the order feature or
+  keep that one step in the portal.
+
+- **A staged conversion (`convert($id, 'deposit'|'final')`) has no successor.**
+  Reading an already-staged invoice's `invoice_scope` and `quote_id` still
+  works exactly as before; originating a new one from a quote does not.
+
+### Added
+
+- **`GoneException`** (`BeckonBilling\ApiClient\Exception`), mapped from HTTP
+  410. Previously a 410 fell through to the base `ApiException` - there was no
+  route that answered it. `quotes->convert()` throws one locally; a real 410
+  from any future route now also maps here instead of the generic base class.
+
+- **`Quote.order`** (`{id, label, public_index}` or `null`) - the order a won
+  quote became, once it exists. Replaces an undocumented boolean `has_order`
+  the portal carried internally; this client never exposed that bit, so this
+  is a clean addition, not a rename. The order itself is not reachable through
+  this API - this only lets you show that one exists and name it.
+
+- **`Quote.lost_reason`** (`""` | `price` | `timing` | `competitor` |
+  `no_need`) and the identically-named **`QuoteInput.lost_reason`**. Required
+  input when `status` moves to `lost` - see the breaking entry below.
+
+- **`Quote.revising`** (bool, read-only) - derived, never stored: true while a
+  new revision is being worked on above the last ISSUED version, which is what
+  the public page and any download still show.
+
+- **`update()`'s response can carry `order_confirmation`**
+  (`{sent: bool, error: string}`) when setting `status: 'won'` triggered the
+  order's confirmation mail. Absent when none was due.
+
+### Changed (BREAKING)
+
+- **A quote is immutable once issued.** `update($id, $data)` with a CONTENT
+  key (a position, a text, the recipient, ...) against an `issued` quote is
+  now refused with 409 `quote_issued_locked` - build a new revision in the
+  portal instead. Against a `won` or `converted` quote it is refused with 409
+  `quote_closed_locked`, unconditionally. A body that ONLY changes the outcome
+  (`{status: 'won'|'lost', ...}`, no content key) on an `issued` quote is NOT
+  content and still goes through with 200 - this is the everyday
+  issue-then-decide flow and stays unaffected.
+
+- **`delete()` refuses anything but a draft.** Before this a quote in any
+  status - issued, even a won and digitally signed one - could be deleted
+  outright and answered 200 `{"deleted": true}`. It now answers 409
+  `quote_closed_undeletable`. Withdraw an issued quote by marking it `lost`
+  instead.
+
+- **`update($id, ['status' => 'lost'])` requires `lost_reason` in the same
+  call.** Omitting it, or sending a value outside `price`/`timing`/
+  `competitor`/`no_need`, now answers 422 `lost_reason_required` and writes
+  NOTHING - the status does not change either. A call that used to work with
+  `{status: 'lost'}` alone needs `lost_reason` added.
+
+- **`update($id, ['status' => 'won'])` can create an order and send its
+  confirmation.** It could only ever flip the field before. See `Quote.order`
+  and `order_confirmation` above.
+
+- **`update($id, ['version' => N])` refuses moving the version backwards.** `N`
+  below the quote's current version now answers 422
+  `quote_version_backwards`, instead of silently accepting it. The version
+  only advances by issuing a revision in the portal; a client should only ever
+  echo the value it read.
+
+- **Re-sending a `won` quote is refused; re-sending a `lost` one still
+  reopens it.** `send()` on a `won` quote now answers 409
+  `quote_won_not_reopenable`, since an order may already depend on its exact
+  content. This corrects a claim `AGENTS.md` and `openapi.yaml` made until
+  today: both said a won OR lost quote reset to `issued` on re-send. That
+  stopped being true once a won quote could carry an order, and nobody
+  updated the sentence when it did.
+
+### Fixed (contract correction, no client code change required unless you use the field)
+
+- **`OutboundInvoice.project_id` / `OutboundInvoiceInput.project_id` were
+  removed from the wire on 2026-08-28 and this contract did not follow.**
+  `order_id` (uuid of the order the invoice was drafted from) replaced it on
+  the same day the order entity shipped; the API has neither read nor emitted
+  `project_id` on an outbound invoice since, silently. Anyone still reading or
+  writing `project_id` here has been losing that value without an error for
+  two days. Found while preparing this release, not part of the quote/order
+  work itself - see `Model\OutboundInvoice` and `openapi.yaml`.
+
+- **`Quote.project_id` was documented but the field does not exist on the
+  model at all any more** (dropped with no successor when the order entity
+  was introduced - a quote's forward link is `Quote.order`, added above).
+  Removed from `openapi.yaml` and `Model\Quote`'s docblock.
+
+### Migration
+
+```diff
+- $result = $client->quotes->convert($quote->id());
+- $newInvoiceId = $result['outbound_invoice_id'];
++ // No v1 replacement today. Mark the quote won and invoice the resulting
++ // order in the portal (or via MCP) until an order endpoint ships:
++ $client->quotes->update($quote->id(), ['status' => 'won']);
+```
+
+```diff
+- $client->quotes->update($id, ['status' => 'lost']);
++ $client->quotes->update($id, ['status' => 'lost', 'lost_reason' => 'price']);
+```
+
+```diff
+- $invoice = $client->outboundInvoices->create(['customer_id' => $id, 'project_id' => $projectId, ...]);
++ $invoice = $client->outboundInvoices->create(['customer_id' => $id, 'order_id' => $orderId, ...]);
+```
+
 ## [0.13.0] - 2026-08-16
 
 A position now carries `unit_key`, the catalogue key, alongside the printed

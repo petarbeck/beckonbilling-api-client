@@ -127,9 +127,15 @@ A user token with exactly one organisation may omit it entirely.
 | `$client->auth` | User-token auth | - |
 
 Each writable resource offers `list()`, `autoPaging()`, `get()`, `create()`,
-`update()`, `delete()`. Quotes and invoices add lifecycle actions
-(`issue`, `send`, `convert`/`cancel`, `setPaid`, `pdf`); articles add variants.
-`units` and `documentTemplates` are read-only - `list()`, `autoPaging()`, `get()`.
+`update()`, `delete()`. Quotes and invoices add lifecycle actions (`issue`,
+`send`/`cancel`, `setPaid`, `pdf`); articles add variants. `units` and
+`documentTemplates` are read-only - `list()`, `autoPaging()`, `get()`.
+
+`Quotes::convert()` is deprecated: `POST /quotes/{id}/convert` was retired on
+2026-08-28 and now answers 410 on every call, so the method throws a local
+`GoneException` (`quote_conversion_moved`) instead of making a request. A won
+quote becomes an order, and the order is what gets invoiced - see AGENTS.md
+for what that means for this client today.
 
 ## Pagination
 
@@ -177,6 +183,7 @@ try {
 | `PermissionException` | 403 (incl. `send_not_permitted` / `bank_not_permitted`) |
 | `NotFoundException` | 404 |
 | `ConflictException` | 409 |
+| `GoneException` | 410 (a route retired for good, e.g. `quote_conversion_moved`) |
 | `ValidationException` | 400 / 422 |
 | `RateLimitException` | 429 |
 | `ServerException` | 5xx |

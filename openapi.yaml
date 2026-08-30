@@ -54,6 +54,20 @@ info:
     `/document-templates` replaced it, and the input key `document_term_id`
     answers 422 `document_term_id_retired` in favour of `document_template_id`.
 
+    **`POST /quotes/{id}/convert` was RETIRED on 2026-08-28** and now answers
+    410 with `error.key = quote_conversion_moved` unconditionally - no
+    deprecation window, closed the same day the portal's own equivalent
+    button was. A quote is no longer turned into an invoice directly: a WON
+    quote becomes an **order** first (a portal-internal entity, "Auftrag"),
+    and the order is what gets invoiced.
+
+    **This API has no order endpoint yet.** There is currently no `/api/v1`
+    route to read an order, trigger its invoice, or otherwise reach what a
+    won quote turned into - that surface is portal/MCP-only for now. A client
+    that used to convert a won quote into an invoice through this API has no
+    replacement call to make here; keep using the portal for that step until
+    an order route ships.
+
     ## Conventions
 
     - **IDs** are opaque UUID strings; integer ids are never exposed. (One
@@ -687,6 +701,36 @@ paths:
     put:
       tags: [Quotes]
       summary: Update a quote
+      description: >-
+        **A quote is immutable once it is issued.** A PUT that carries a
+        CONTENT key (a position, a text, a recipient field, ...) against an
+        `issued` quote is refused with 409 `quote_issued_locked` - start a new
+        revision instead. Against a `won` or `converted` quote it is refused
+        with 409 `quote_closed_locked` regardless of which keys the body
+        carries. A pure outcome change (`{status: 'won'}` / `{status:
+        'lost', ...}`, with no content key alongside it) on an `issued` quote
+        is NOT content and still answers 200 - the lock applies to the
+        content, not the document.
+
+
+        Sending `version` BELOW the quote's current version is refused with
+        422 `quote_version_backwards` - the version only advances by issuing a
+        revision in the portal; this floor exists so an older or direct write
+        cannot hide a revision that already printed.
+
+
+        **Setting `status: 'lost'` requires `lost_reason`** - one of `price`,
+        `timing`, `competitor`, `no_need`. Omitting it, or sending a value
+        outside that set, is refused with 422 `lost_reason_required` and
+        nothing is written - the status does not change either.
+
+
+        **Setting `status: 'won'` can create an order and trigger the order
+        confirmation.** When it does, the response carries `order_confirmation`
+        (`{ sent: bool, error: string }`) describing whether that mail went
+        out; absent when no confirmation was due. The order itself is not
+        reachable through this API yet - see the note at the top of this
+        document.
       requestBody:
         required: true
         content:
@@ -694,15 +738,51 @@ paths:
             schema: { $ref: "#/components/schemas/QuoteInput" }
       responses:
         "200":
-          description: The updated quote.
+          description: >-
+            The updated quote, plus `order_confirmation` when marking it won
+            triggered one.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Quote" }
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Quote"
+                  - type: object
+                    properties:
+                      order_confirmation:
+                        type: object
+                        nullable: true
+                        properties:
+                          sent: { type: boolean }
+                          error: { type: string }
+        "409":
+          description: >-
+            Content locked - `quote_issued_locked` (issued) or
+            `quote_closed_locked` (won/converted).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: >-
+            `quote_version_backwards` (version sent below the current one) or
+            `lost_reason_required` (`status: 'lost'` without a valid reason).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
     delete:
       tags: [Quotes]
       summary: Soft-delete a quote
+      description: >-
+        **Only a draft can be deleted.** A quote in any other status is
+        refused with 409 `quote_closed_undeletable` - withdraw an issued quote
+        by marking it lost instead. Before this, an issued or even a won and
+        signed quote could be deleted outright; it cannot any more.
       responses:
         "200": { description: Deleted. }
+        "409":
+          description: Not a draft (`error.key = quote_closed_undeletable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /quotes/{id}/issue:
     post:
@@ -730,7 +810,13 @@ paths:
       tags: [Quotes]
       summary: Email the quote (requires the `send` capability)
       description: >-
-        Issues drafts first and resets a won/lost quote back to issued.
+        Issues drafts first. Re-sending a **lost** quote reopens it back to
+        issued, so the customer can respond again. Re-sending a **won** quote
+        does the opposite: it is refused outright with 409
+        `quote_won_not_reopenable`, since an order may already depend on this
+        exact content. This corrects a statement this document made until
+        2026-08-30: it used to say a won quote was reset the same way a lost
+        one is, which stopped being true once a won quote could carry an order.
 
 
         **The body is an envelope, not a bare quote** - unlike every other quote
@@ -769,6 +855,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >-
+            The quote is `won` and cannot be reopened by re-sending
+            (`error.key = quote_won_not_reopenable`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "422":
           description: No recipient address (`error.key = recipient_email_missing`).
           content:
@@ -779,89 +872,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-
-  /quotes/{id}/convert:
-    post:
-      tags: [Quotes]
-      summary: Create a draft invoice from the quote
-      description: >-
-        Requires `quotes` Full and `outbound_invoices` Full.
-
-        A quote whose lines are ALL `billing_mode: recurring` has no one-time
-        invoice to create and is refused with 409 `quote_is_recurring_only` - it
-        converts to a recurring invoice, which this v1 action does not create.
-        Use the portal for a mixed or recurring-only quote.
-
-
-        **`scope` decides WHICH invoice this creates** - the whole thing, a down
-        payment, or the remainder. Omitting it keeps the behaviour this action
-        has always had. See `OutboundInvoice.invoice_scope` for how a down
-        payment and a final invoice add up.
-
-
-        **The new invoice is seeded from a TEMPLATE, not from the quote.** Its
-        `terms_text`, `payment_terms_text` and `due_date` come from the
-        customer's own settings, else the customer's template, else the
-        organisation's default invoice template - the same chain a hand-made
-        invoice resolves. The quote's own terms never travel: they say different
-        things on the two documents, and the quote wording holds
-        `{valid_until}`, which an invoice cannot resolve. Note `due_date` is
-        therefore a date on a freshly converted invoice; it used to be `null`.
-
-
-        **Its `document_ids` do NOT follow that chain.** Attachments come only
-        from the ORGANISATION's default invoice template; a customer's own
-        template never contributes them, here or on a hand-made invoice. A
-        customer whose template carries no attachments therefore still gets the
-        organisation default's.
-
-
-        Refusals worth handling, all by `error.key`: `invoice_scope_unknown`
-        (422, a `scope` outside the three values); `customer_required` (409);
-        `quote_has_no_positions` (409); `quote_is_recurring_only` (409);
-        `quote_already_invoiced` (409); and, for the two staged scopes,
-        `quote_has_no_deposit` (422, `scope=deposit` on a quote carrying none),
-        `quote_deposit_base_empty` (422), `deposit_invoice_exists` (409),
-        `quote_has_deposit_invoice` (409, `scope=full` once a down payment
-        exists - the rest belongs on a final invoice), `no_deposit_invoice`
-        (409, `scope=final` with no ISSUED down payment to deduct),
-        `quote_has_draft_invoice` (409, issue or delete it first) and
-        `final_invoice_exists` (409).
-      parameters:
-        - $ref: "#/components/parameters/id"
-        - $ref: "#/components/parameters/organisation"
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                scope:
-                  type: string
-                  enum: [full, deposit, final]
-                  default: full
-                  description: >-
-                    Which invoice to create. `full` bills the whole one-time
-                    part, as this action always did - omitting `scope`, or
-                    sending null or an empty string, means exactly that.
-                    `deposit` bills only the quote's down payment; `final` bills
-                    the remainder, deducting an already-issued down payment.
-                    Anything else is 422 `invoice_scope_unknown` - it is refused
-                    rather than coerced, because falling back to `full` would
-                    silently bill the entire amount.
-      responses:
-        "201":
-          description: The new invoice id + the (converted) quote.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  outbound_invoice_id: { type: string }
-                  quote: { $ref: "#/components/schemas/Quote" }
-        "409": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
 
   /quotes/{id}/pdf:
     get:
@@ -2122,6 +2132,23 @@ components:
         public_index: { type: string }
         version: { type: integer }
         status: { type: string, enum: [draft, issued, won, lost, converted] }
+        revising:
+          type: boolean
+          readOnly: true
+          description: >-
+            Derived, never stored: true while a new revision is being worked
+            on above the last ISSUED one. The last issued version is what the
+            public page and any download still show; this is the flag a UI
+            uses to say "revision in progress" without knowing the status
+            strings that produce it.
+        lost_reason:
+          type: string
+          enum: ["", price, timing, competitor, no_need]
+          description: >-
+            Why a `lost` quote was lost. Set through the identically-named
+            input key when the status changes to `lost` (see `QuoteInput` for
+            the requirement); `""` on any quote not currently lost, and on a
+            lost quote written before this field existed.
         customer_id: { type: string }
         customer_label:
           type: string
@@ -2132,7 +2159,21 @@ components:
             document prints and deliberately does not. Falls back to the snapshot
             when the quote has no linked customer.
         partner_id: { type: string, nullable: true, description: Commission partner. }
-        project_id: { type: string, nullable: true }
+        order:
+          type: object
+          nullable: true
+          readOnly: true
+          description: >-
+            The order (`Auftrag`) this quote became once it was won, or null
+            while none exists. **Replaced a boolean `has_order` on
+            2026-08-28** - the only remaining consumer needed a reference, not
+            a bit. The order itself is not reachable through this API yet
+            (see the note at the top of this document): this is enough to
+            know one exists and to show its number, not to act on it here.
+          properties:
+            id: { type: string, description: Uuid of the order. }
+            label: { type: string }
+            public_index: { type: string, description: "Empty while the order has not been issued a number." }
         recipient: { $ref: "#/components/schemas/Recipient" }
         positions:
           type: array
@@ -2263,8 +2304,9 @@ components:
           nullable: true
           readOnly: true
           description: >-
-            The recurring template its recurring lines produced, if any. The v1
-            convert action never creates one - see `POST /quotes/{id}/convert`.
+            The recurring template its recurring lines produced, if any. Set
+            only by the portal/order flow - there is no `/api/v1` action that
+            creates one.
         accepted_at: { type: string, format: date-time, nullable: true, readOnly: true, description: When the customer accepted it on the public page. }
         has_signature: { type: boolean, readOnly: true, description: Whether that acceptance carries a drawn signature. }
         rejected_at: { type: string, format: date-time, nullable: true, readOnly: true }
@@ -2354,7 +2396,6 @@ components:
           description: >-
             Commission partner for this quote. A foreign partner is refused; an
             empty value clears it. Otherwise inherited from the customer.
-        project_id: { type: string, description: Empty clears the link. A foreign project is refused. }
         document_ids:
           type: array
           items: { type: string }
@@ -2400,14 +2441,36 @@ components:
             customer's template, then the organisation's default template, then
             a 30-day fallback. An explicit value here always wins over all of
             them; send an empty string to clear it.
-        version: { type: integer, minimum: 1, maximum: 99, description: Forced to 1 while the quote is a draft. }
+        version:
+          type: integer
+          minimum: 1
+          maximum: 99
+          description: >-
+            Forced to 1 while the quote is a draft. Above the quote's current
+            value, a client should only ever be ECHOING what it just read -
+            the version itself only advances by issuing a revision in the
+            portal. Sending a value BELOW the current one is refused with 422
+            `quote_version_backwards`, so an older write cannot hide a
+            revision that has already gone out.
         status:
           type: string
           enum: [issued, won, lost]
           description: >-
             Outcome tracking only. These three may be set on one another; `draft`
             and `converted` are never settable and a value outside this set is
-            ignored rather than refused.
+            ignored rather than refused. A body that ONLY carries `status` (plus
+            `lost_reason`/`version`) against an `issued` quote is a pure outcome
+            change and is exempt from the content lock described on `PUT
+            /quotes/{id}`; a body with any other key is not, even if that other
+            key's value does not actually change.
+        lost_reason:
+          type: string
+          enum: [price, timing, competitor, no_need]
+          description: >-
+            Required when `status` is being changed to `lost` in the same
+            request - omitting it, or sending a value outside this set, is
+            refused with 422 `lost_reason_required` and nothing is written,
+            including the status itself. Not enforced for any other status.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
@@ -2528,7 +2591,17 @@ components:
             The LIVE customer's display name - what a list should show, since it
             follows a later rename. `recipient` and `customer_name` are the
             frozen snapshot the document prints and deliberately do not.
-        project_id: { type: string, nullable: true }
+        order_id:
+          type: string
+          nullable: true
+          description: >-
+            Uuid of the order (`Auftrag`) this invoice was drafted from, or
+            null for one created directly. **Replaced `project_id` on
+            2026-08-28** - a document used to link straight to a project; an
+            order sits between them now. An old client reading or writing
+            `project_id` here silently loses the value, since the API neither
+            reads nor emits that key any more (there is no refusal - see
+            `additionalProperties` above).
         document_send_mode:
           type: string
           enum: [link, attach]
@@ -2868,7 +2941,13 @@ components:
             stop an inherited one; a foreign partner is refused. Send it AFTER
             (or with) `customer_id` - assigning a customer seeds it first, then
             this overrides.
-        project_id: { type: string, description: Empty clears the link. A foreign project is refused. }
+        order_id:
+          type: string
+          description: >-
+            Uuid of the order (`Auftrag`) to link. Empty (or `"0"`) clears the
+            link; an unknown or foreign one is refused with 404
+            `order_not_found`. **Replaced `project_id` on 2026-08-28** - see
+            `OutboundInvoice.order_id`.
         document_ids:
           type: array
           items: { type: string }
