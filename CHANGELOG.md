@@ -123,6 +123,23 @@ than shipping a quiet no-op.
   was introduced - a quote's forward link is `Quote.order`, added above).
   Removed from `openapi.yaml` and `Model\Quote`'s docblock.
 
+- **`update()`'s `positions` can 409 `quote_positions_locked_by_billing` on a
+  `draft`, `lost` or `revising` quote, not only an issued one - undocumented
+  until now, and not obvious from the status alone.** An order links to a
+  quote (`quote_id`, a portal/MCP action) with no requirement that the quote
+  be won first, and billing one of that quote's positions from the order
+  carries no such requirement either - so a `draft` quote can already have a
+  genuinely billed order behind it. The check is per position, verified
+  against a title/quantity/price fingerprint taken when it was billed, so a
+  line that has since changed is not treated as protected, and echoing back
+  what you read is always safe. Verified against the running server, not just
+  the source: several pre-existing draft quotes in the dev database already
+  carried exactly this state, both the locked and the not-locked (fingerprint
+  mismatch) case, and calling the real `apply()` against them reproduced 409
+  `quote_positions_locked_by_billing` and a clean pass respectively. This
+  behaviour is not new in this release and nothing about it changed here -
+  only the documentation is.
+
 ### Migration
 
 ```diff

@@ -731,6 +731,14 @@ paths:
         out; absent when no confirmation was due. The order itself is not
         reachable through this API yet - see the note at the top of this
         document.
+
+
+        **A `positions` key is refused with 409 `quote_positions_locked_by_billing`
+        if an order already invoiced any of the positions being changed** -
+        this applies on a `draft`, `lost` or `revising` quote too, not only an
+        issued one, because linking an order to a quote is itself independent
+        of the quote's status (see the portal's order documentation). Sending
+        back exactly the positions you read is always safe, on any quote.
       requestBody:
         required: true
         content:
@@ -757,7 +765,10 @@ paths:
         "409":
           description: >-
             Content locked - `quote_issued_locked` (issued) or
-            `quote_closed_locked` (won/converted).
+            `quote_closed_locked` (won/converted) - or `positions` sent
+            against a quote whose order already billed one of them
+            (`quote_positions_locked_by_billing`, reachable on ANY status,
+            including `draft`/`lost`/`revising`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

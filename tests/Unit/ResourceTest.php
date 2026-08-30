@@ -425,6 +425,35 @@ final class ResourceTest extends ClientTestCase
     }
 
     /**
+     * `quote_positions_locked_by_billing` (409) is reachable on a `draft`
+     * quote - it is not limited to the issued/won/converted locks above. An
+     * order can be linked to (and bill against) a quote regardless of that
+     * quote's status, so a draft quote can already have a genuinely billed
+     * order behind it; status alone is not enough to tell whether `positions`
+     * is safe to send. Verified live against the running portal for this
+     * release, not just read from source - see CHANGELOG.md.
+     */
+    public function testPositionsLockedByBillingReachesEvenADraftQuote(): void
+    {
+        $http = (new MockHttpClient())->push(409, [
+            'error' => [
+                'code' => 409,
+                'message' => 'This quote is already partially billed through its order, so its positions can no longer be changed.',
+                'key' => 'quote_positions_locked_by_billing',
+            ],
+        ]);
+
+        try {
+            $this->makeClient($http)->quotes->update('q1', [
+                'positions' => [['title' => 'Changed', 'quantity' => 1, 'price' => 999, 'tax_percent' => 20]],
+            ]);
+            $this->fail('Expected ConflictException');
+        } catch (ConflictException $e) {
+            $this->assertSame('quote_positions_locked_by_billing', $e->getErrorKey());
+        }
+    }
+
+    /**
      * `version` only advances by issuing a revision in the portal; sending a
      * value below the quote's current one is refused rather than silently
      * hiding a revision that already went out.

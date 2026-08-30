@@ -156,6 +156,19 @@ mail went out. **This API has no order endpoint yet** - `order` tells you one
 exists and names it; it does not let you read, invoice or otherwise act on it
 through this client. Use the portal for that until an order route ships.
 
+**Sending `positions` can be refused even on a quote that is NOT locked at
+all - `draft`, `lost` and `revising` included.** 409
+`quote_positions_locked_by_billing` fires when an order already invoiced one
+of the positions in the body. This is not limited to a quote that was itself
+won and converted into that order: linking an order to a quote (its `quote_id`,
+a portal/MCP action) carries no status requirement of its own, so a `draft`
+quote can genuinely already have a billed order sitting behind it. The check
+is per POSITION INDEX, verified against a fingerprint (title/quantity/price)
+taken at billing time - an index whose content still matches that fingerprint
+is locked, one whose content has since changed is not (a moved or re-typed
+line is treated as a different line, not a protected one). Sending back
+exactly the positions you read is always safe, on any status.
+
 **A quote can be addressed to something other than a customer.** Pass
 `recipient_kind` (`customer` | `lead` | `supplier` | `partner`) together with
 `recipient_ref_id`; the printed recipient block is snapshotted server-side from
@@ -441,7 +454,7 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `AuthenticationException` | 401 | bad/expired token; `tfa_required` on login |
 | `PermissionException` | 403 | `missing_permission`, `send_not_permitted`, `bank_not_permitted` |
 | `NotFoundException` | 404 | absent or foreign-organisation |
-| `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked, `quote_issued_locked`/`quote_closed_locked`/`quote_closed_undeletable`/`quote_won_not_reopenable`) |
+| `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked, `quote_issued_locked`/`quote_closed_locked`/`quote_closed_undeletable`/`quote_won_not_reopenable`/`quote_positions_locked_by_billing`) |
 | `GoneException` | 410 | a route retired for good, e.g. `quote_conversion_moved` (thrown locally by `quotes->convert()`, without a request) |
 | `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`, `lost_reason_required`, `quote_version_backwards`) |
 | `RateLimitException` | 429 | back off |
@@ -694,6 +707,10 @@ $client->recurringInvoices->create([
 - **`update()`ing content on an issued/won/converted quote** 409s
   (`quote_issued_locked` / `quote_closed_locked`) - a pure `status` change to
   `won`/`lost` on an `issued` quote is the one exception.
+- **Sending `positions` can ALSO 409 on a `draft`/`lost`/`revising` quote**
+  (`quote_positions_locked_by_billing`) if an order already invoiced one of
+  them - status is not a reliable signal by itself for whether a quote's
+  positions are still free to change. See "Quote actions" above.
 - `quotes->convert()` always throws `GoneException` now - it never sends a
   request. See "Quote actions" above.
 - `setPaid($id, false)` 409s while transaction-linked payments exist.
