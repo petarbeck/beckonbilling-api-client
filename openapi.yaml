@@ -713,10 +713,15 @@ paths:
         content, not the document.
 
 
-        Sending `version` BELOW the quote's current version is refused with
-        422 `quote_version_backwards` - the version only advances by issuing a
-        revision in the portal; this floor exists so an older or direct write
-        cannot hide a revision that already printed.
+        `version` is assigned by the server when a revision is issued in the
+        portal - it cannot be set directly. Echoing back exactly the value you
+        just read is tolerated, so a whole-object PUT from an existing caller
+        does not break; any other value, above OR below the current one, is
+        refused with 422 `quote_version_not_settable`. This is about document
+        integrity, not tidiness: the version is baked into the printed
+        document number, so an unrestricted write would let an ordinary
+        organisation token forge the number of a document the customer
+        already holds.
 
 
         **Setting `status: 'lost'` requires `lost_reason`** - one of `price`,
@@ -774,7 +779,8 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "422":
           description: >-
-            `quote_version_backwards` (version sent below the current one) or
+            `quote_version_not_settable` (`version` sent as anything other
+            than an unchanged echo of the current value) or
             `lost_reason_required` (`status: 'lost'` without a valid reason).
           content:
             application/json:
@@ -2457,12 +2463,16 @@ components:
           minimum: 1
           maximum: 99
           description: >-
-            Forced to 1 while the quote is a draft. Above the quote's current
-            value, a client should only ever be ECHOING what it just read -
-            the version itself only advances by issuing a revision in the
-            portal. Sending a value BELOW the current one is refused with 422
-            `quote_version_backwards`, so an older write cannot hide a
-            revision that has already gone out.
+            Read-only in effect: the server assigns this when a revision is
+            issued in the portal, and it is forced to 1 while the quote is a
+            draft. A client should only ever be ECHOING what it just read -
+            that exact value is tolerated so a whole-object PUT does not
+            break on it, but any other value, above OR below the current one,
+            is refused with 422 `quote_version_not_settable`. This guards
+            document integrity: the version is baked into the printed
+            document number, so an unrestricted write would let an ordinary
+            organisation token forge the number of a document the customer
+            already holds.
         status:
           type: string
           enum: [issued, won, lost]

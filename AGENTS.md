@@ -135,10 +135,14 @@ portal instead. Against a `won` or `converted` quote it is refused with 409
 `quote_closed_locked`, unconditionally. A PURE outcome change (`{status: 'won'
 | 'lost', ...}` with no content key alongside it) on an `issued` quote is not
 content and still goes through with 200 - the lock is on the content, not the
-document. `version` only moves forward: sending one below the quote's current
-value is refused with 422 `quote_version_backwards` rather than silently
-hiding a revision that already went out. **Only a `draft` can still be
-deleted** - `delete()` on anything else is refused with 409
+document. `version` is assigned by the server when a revision is issued in
+the portal - it cannot be set directly. Echoing back exactly the value you
+just read is tolerated (a whole-object PUT should not break on it), but any
+other value, above or below the current one, is refused with 422
+`quote_version_not_settable`: the version is baked into the printed document
+number, so an unrestricted write would let an ordinary organisation token
+forge the number of a document the customer already holds. **Only a `draft`
+can still be deleted** - `delete()` on anything else is refused with 409
 `quote_closed_undeletable`; withdraw an issued quote by marking it lost.
 
 **Setting `status: 'lost'` requires a reason (2026-08-29).**
@@ -456,7 +460,7 @@ Non-2xx throws a subclass of `BeckonBilling\ApiClient\Exception\ApiException`:
 | `NotFoundException` | 404 | absent or foreign-organisation |
 | `ConflictException` | 409 | wrong state (draft PDF, delete issued, un-pay linked, `quote_issued_locked`/`quote_closed_locked`/`quote_closed_undeletable`/`quote_won_not_reopenable`/`quote_positions_locked_by_billing`) |
 | `GoneException` | 410 | a route retired for good, e.g. `quote_conversion_moved` (thrown locally by `quotes->convert()`, without a request) |
-| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`, `lost_reason_required`, `quote_version_backwards`) |
+| `ValidationException` | 400/422 | rejected payload (`unit_unknown`, `unrecognised_keys`, `article_not_found`, `lost_reason_required`, `quote_version_not_settable`) |
 | `RateLimitException` | 429 | back off |
 | `ServerException` | 5xx | retryable |
 | `TransportException` | 0 | network failure; original PSR-18 error is `->getPrevious()` |

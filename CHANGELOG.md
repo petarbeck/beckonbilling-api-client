@@ -93,11 +93,14 @@ than shipping a quiet no-op.
   confirmation.** It could only ever flip the field before. See `Quote.order`
   and `order_confirmation` above.
 
-- **`update($id, ['version' => N])` refuses moving the version backwards.** `N`
-  below the quote's current version now answers 422
-  `quote_version_backwards`, instead of silently accepting it. The version
-  only advances by issuing a revision in the portal; a client should only ever
-  echo the value it read.
+- **`update($id, ['version' => N])` no longer accepts an arbitrary value.**
+  The revision number is assigned by the server when a revision is issued in
+  the portal and cannot be set directly. Echoing back exactly the value you
+  just read is tolerated - a whole-object PUT should not break on it - but
+  any other value, above OR below the current one, now answers 422
+  `quote_version_not_settable`. This guards the printed document number: an
+  unrestricted write would let an ordinary organisation token forge the
+  number of a document the customer already holds.
 
 - **Re-sending a `won` quote is refused; re-sending a `lost` one still
   reopens it.** `send()` on a `won` quote now answers 409

@@ -454,20 +454,20 @@ final class ResourceTest extends ClientTestCase
     }
 
     /**
-     * `version` only advances by issuing a revision in the portal; sending a
-     * value below the quote's current one is refused rather than silently
-     * hiding a revision that already went out.
+     * `version` is assigned by the server when a revision is issued in the
+     * portal; it cannot be set directly. Echoing back exactly the value just
+     * read is tolerated, but any other value - higher or lower - is refused.
      */
-    public function testSendingAnOlderVersionIsRefused(): void
+    public function testSendingADifferentVersionIsRefused(): void
     {
         $http = (new MockHttpClient())
-            ->push(422, ['error' => ['code' => 422, 'message' => 'The quote version cannot move backwards.', 'key' => 'quote_version_backwards']]);
+            ->push(422, ['error' => ['code' => 422, 'message' => 'The quote revision number is assigned by the server when a revision is issued; it cannot be set directly.', 'key' => 'quote_version_not_settable']]);
 
         try {
-            $this->makeClient($http)->quotes->update('q1', ['version' => 1]);
+            $this->makeClient($http)->quotes->update('q1', ['version' => 5]);
             $this->fail('Expected ValidationException');
         } catch (ValidationException $e) {
-            $this->assertSame('quote_version_backwards', $e->getErrorKey());
+            $this->assertSame('quote_version_not_settable', $e->getErrorKey());
         }
     }
 
