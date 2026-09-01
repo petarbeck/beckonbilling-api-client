@@ -85,9 +85,12 @@ final class Quotes extends AbstractResource
      * @deprecated Since 0.14.0. The route this called, `POST
      * /quotes/{id}/convert`, was retired on 2026-08-28 and now answers 410
      * `quote_conversion_moved` on every call - a won quote becomes an ORDER
-     * first, and the order is what gets invoiced. That order is not reachable
-     * through this API yet, so there is no direct replacement call here; the
-     * portal is the only place to take a won quote to invoice right now.
+     * first, and the order is what gets invoiced.
+     *
+     * **Since 0.15.0 the order itself is reachable** (`$client->orders`, and
+     * `Quote::$order` carries its id), but INVOICING one still is not: the
+     * portal's invoice-from-order action creates a document and is postponed,
+     * so there remains no replacement call for what this method used to do.
      *
      * This method is kept, rather than removed, so an existing call site
      * fails with a clear, catchable, on-topic exception instead of a fatal
@@ -109,9 +112,9 @@ final class Quotes extends AbstractResource
     {
         throw new GoneException(
             'POST /quotes/{id}/convert was retired on 2026-08-28 and now answers 410 on every '
-            . 'call. A won quote becomes an order, and the order is what gets invoiced - there is '
-            . 'no /api/v1 route for orders yet, so this client has no replacement call to make. '
-            . 'Use the portal to invoice a won quote until an order route ships.',
+            . 'call. A won quote becomes an order, and the order is what gets invoiced. The order '
+            . 'is readable since 0.15.0 ($client->orders, id in Quote::$order), but invoicing one '
+            . 'has no /api/v1 route yet - use the portal for that step.',
             410,
             'quote_conversion_moved'
         );

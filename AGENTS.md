@@ -9,18 +9,19 @@ is [`openapi.yaml`](openapi.yaml); this file is the client-usage companion.)
 
 A thin, typed PHP wrapper over the Beckon Billing public REST API (`/api/v1`).
 Namespace `BeckonBilling\ApiClient\`, PHP `>=8.2`, PSR-4, PSR-18/PSR-17 for
-transport. It exposes eight entities - six writable (customers, article
-categories, articles, quotes, outbound invoices, recurring invoices) and two
-read-only (units, document templates) - plus user-token auth. It holds no secrets; a
-valid API token is required to do anything.
+transport. It exposes nine entities - seven writable (customers, article
+categories, articles, quotes, **orders**, outbound invoices, recurring
+invoices) and two read-only (units, document templates) - plus user-token auth.
+It holds no secrets; a valid API token is required to do anything.
 
-**Known gap (since 2026-08-28): a won quote cannot be invoiced through this
-API.** The portal turns a won quote into an **order** first, and the order is
-what gets invoiced (`POST /quotes/{id}/convert` was retired, 410
-`quote_conversion_moved`); `/api/v1` does not expose an order endpoint yet. A
-consumer that used to run quote -> invoice through this client has no
-replacement call here - see `Quotes::convert()` and the "Quote actions"
-section below.
+**Known gap, now smaller (since 0.15.0): the ORDER is readable, INVOICING one
+is still not.** The portal turns a won quote into an **order** first, and the
+order is what gets invoiced (`POST /quotes/{id}/convert` was retired, 410
+`quote_conversion_moved`). Since 0.15.0 `$client->orders` reads, creates,
+updates and deletes that order, and `Quote::$order` carries its id - but the
+portal's invoice-from-order action creates a document and is postponed, so a
+consumer that used to run quote -> invoice through this client still has no
+replacement call. See `Quotes::convert()` and the "Quote actions" section.
 
 ## Install
 
@@ -115,6 +116,7 @@ Resource properties and their models:
 | `$client->units` | `units` | `Model\Unit` | none - readable with any valid token |
 | `$client->documentTemplates` | `document-templates` | `Model\DocumentTemplate` | `quotes` or `outbound_invoices` |
 | `$client->quotes` | `quotes` | `Model\Quote` | `quotes` |
+| `$client->orders` | `orders` | `Model\Order` | `orders` |
 | `$client->outboundInvoices` | `outbound-invoices` | `Model\OutboundInvoice` | `outbound_invoices` |
 | `$client->recurringInvoices` | `recurring-invoices` | `Model\RecurringInvoice` | `recurring_invoices` |
 
@@ -207,8 +209,34 @@ existing call site gets a clear, catchable, on-topic exception (status 410,
 `error.key = quote_conversion_moved`) instead of a fatal "call to undefined
 method" - it throws locally, without a request, the same way
 `ReadOnlyResource` refuses a write without spending a round trip on a
-guaranteed 405. **There is no replacement call on this API**: invoicing a won
-quote is portal-only until an order endpoint ships.
+guaranteed 405. **There is still no replacement call**: since 0.15.0 you can
+READ the order the quote became (`$client->orders->get($quote->order['id'])`),
+but invoicing it is portal-only until that action ships here.
+
+### Orders (`$client->orders`)
+
+Auftraege - the work container between a quote and its invoices, with its own
+number range `A-{YYYY}-{NNNN}`. Ordinary CRUD; `list()` filters on `status`,
+`customer_id` and `q`.
+
+**Creating one needs `label` and `customer_id`** (422 `label_required` /
+`order_customer_required`) - an order without a customer cannot be invoiced.
+
+Two omissions are deliberate, not gaps to work around:
+
+- **No internal rate, no profitability.** The portal's payload also carries
+  `internal_hourly_rate`, `resolved_internal_rate`, `resolved_hourly_rate` and
+  a `financials` block with the margin; this surface leaves all four out.
+  `hourly_rate` - what the CUSTOMER is billed - is here; what the work costs
+  you is not. Sending any of the four on a write is tolerated and ignored, so a
+  read-modify-write of a portal payload does not fail.
+- **No sub-routes.** `/orders/{id}/<anything>` answers 404, including the
+  portal's invoice-from-order and recurring-from-order actions.
+
+`status` and `start_date` are read-only: moving an order along is a portal
+action, and the start date is derived from the work. `settled_at` is read-only
+too - a stamp one can set is a stamp that can lie. Deleting an order with an
+issued invoice on it answers 409 `order_has_issued_invoices`.
 
 ### Outbound-invoice actions (`$client->outboundInvoices`)
 

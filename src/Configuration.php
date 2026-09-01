@@ -29,7 +29,16 @@ use Psr\Http\Message\StreamFactoryInterface;
  */
 final class Configuration
 {
-    public const VERSION = '0.1.0';
+    /**
+     * The package version, and it is the USER-AGENT this client announces.
+     *
+     * It stood at `0.1.0` from the first release until 0.15.0 while the package
+     * itself went to 0.14.0 - so every request this client ever made told the
+     * server the wrong version, and any server-side reading of client versions
+     * was worthless. Bumped with the release from now on; a marker nobody
+     * maintains is worse than none, because it is believed.
+     */
+    public const VERSION = '0.15.0';
 
     public readonly ?string $token;
     public readonly string $baseUri;

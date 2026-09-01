@@ -6,7 +6,7 @@
 
 The official PHP client for the [Beckon Billing](https://www.beckonbilling.com)
 REST API (v1) - a small, typed, idiomatic wrapper over the public
-`/api/v1` surface: customers, article categories, articles, quotes, outbound
+`/api/v1` surface: customers, article categories, articles, quotes, orders, outbound
 invoices and recurring invoices, the read-only units and document-templates
 vocabularies, plus user-token authentication.
 
@@ -122,6 +122,7 @@ A user token with exactly one organisation may omit it entirely.
 | `$client->units` | Units (read-only) | none - any valid token |
 | `$client->documentTemplates` | Document templates (read-only) | `quotes` / `outbound_invoices` |
 | `$client->quotes` | Quotes | `quotes` |
+| `$client->orders` | Orders (Auftraege) - no internal rate, no profitability, no sub-routes | `orders` |
 | `$client->outboundInvoices` | Outbound invoices | `outbound_invoices` |
 | `$client->recurringInvoices` | Recurring invoices | `recurring_invoices` |
 | `$client->auth` | User-token auth | - |

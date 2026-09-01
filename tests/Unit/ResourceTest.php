@@ -11,6 +11,7 @@ use BeckonBilling\ApiClient\Exception\ValidationException;
 use BeckonBilling\ApiClient\Model\ArticleVariant;
 use BeckonBilling\ApiClient\Model\Customer;
 use BeckonBilling\ApiClient\Model\DocumentTemplate;
+use BeckonBilling\ApiClient\Model\Order;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
 use BeckonBilling\ApiClient\Model\Quote;
 use BeckonBilling\ApiClient\Model\Unit;
@@ -482,5 +483,101 @@ final class ResourceTest extends ClientTestCase
         $invoice = $this->makeClient($http)->outboundInvoices->get('inv1');
 
         $this->assertSame('o1', $invoice->order_id);
+    }
+
+    /**
+     * The order (Auftrag) is an ordinary CRUD entity here - the point of these
+     * four is that it IS wired at all: `$client->orders` did not exist until
+     * 0.15.0, while the portal had shipped `/api/v1/orders` before it.
+     */
+    public function testOrderCrudHitsTheOrdersPath(): void
+    {
+        $http = (new MockHttpClient())
+            ->push(200, ['id' => 'o1', 'label' => 'Tor ATEC', 'public_index' => 'A-2026-0007'])
+            ->push(201, ['id' => 'o2', 'label' => 'Neu'])
+            ->push(200, ['id' => 'o2', 'label' => 'Umbenannt'])
+            ->push(204, []);
+        $client = $this->makeClient($http);
+
+        $order = $client->orders->get('o1');
+        $this->assertInstanceOf(Order::class, $order);
+        $this->assertSame('A-2026-0007', $order->public_index);
+        $this->assertStringEndsWith('/orders/o1', explode('?', (string) $http->requests[0]->getUri())[0]);
+
+        $created = $client->orders->create(['label' => 'Neu']);
+        $this->assertInstanceOf(Order::class, $created);
+        $this->assertSame('POST', $http->requests[1]->getMethod());
+        $this->assertStringEndsWith('/orders', explode('?', (string) $http->requests[1]->getUri())[0]);
+
+        $client->orders->update('o2', ['label' => 'Umbenannt']);
+        $this->assertSame('PUT', $http->requests[2]->getMethod());
+
+        $client->orders->delete('o2');
+        $this->assertSame('DELETE', $http->requests[3]->getMethod());
+        $this->assertStringEndsWith('/orders/o2', explode('?', (string) $http->requests[3]->getUri())[0]);
+    }
+
+    /**
+     * The three list filters the portal actually honours. `customer_id` is
+     * scoped there: a uuid of another organisation is refused rather than
+     * matching nothing, so it is worth sending deliberately.
+     */
+    public function testOrderListForwardsItsFilters(): void
+    {
+        $http = (new MockHttpClient())->push(200, ['data' => [['id' => 'o1']], 'total' => 1, 'limit' => 25, 'offset' => 0]);
+        $page = $this->makeClient($http)->orders->list([
+            'status' => 'in_progress',
+            'customer_id' => 'cu1',
+            'q' => 'ATEC',
+        ]);
+
+        $this->assertContainsOnlyInstancesOf(Order::class, iterator_to_array($page));
+        $query = (string) $http->requests[0]->getUri();
+        $this->assertStringContainsString('status=in_progress', $query);
+        $this->assertStringContainsString('customer_id=cu1', $query);
+        $this->assertStringContainsString('q=ATEC', $query);
+    }
+
+    /**
+     * `label` and `customer_id` are required on create. Found by driving the
+     * running API, not by reading the endpoint - the mock suite alone would
+     * never have shown it, and the docs said "every field is optional" until
+     * the live run answered 422.
+     */
+    public function testOrderCreateRequiresLabelAndCustomer(): void
+    {
+        $http = (new MockHttpClient())->push(422, ['error' => [
+            'code' => 422,
+            'message' => 'A customer is required.',
+            'key' => 'order_customer_required',
+        ]]);
+
+        try {
+            $this->makeClient($http)->orders->create(['label' => 'ohne Kunde']);
+            $this->fail('expected a ValidationException');
+        } catch (ValidationException $e) {
+            $this->assertSame('order_customer_required', $e->getErrorKey());
+        }
+    }
+
+    /**
+     * Deleting an order that already carries an issued invoice is refused by
+     * the portal, not by this client - the test pins the error key a caller
+     * branches on.
+     */
+    public function testOrderDeleteConflictCarriesItsKey(): void
+    {
+        $http = (new MockHttpClient())->push(409, ['error' => [
+            'code' => 409,
+            'message' => 'This order has issued invoices.',
+            'key' => 'order_has_issued_invoices',
+        ]]);
+
+        try {
+            $this->makeClient($http)->orders->delete('o1');
+            $this->fail('expected a ConflictException');
+        } catch (ConflictException $e) {
+            $this->assertSame('order_has_issued_invoices', $e->getErrorKey());
+        }
     }
 }

@@ -188,6 +188,12 @@ tags:
   - name: Document templates
     description: Document templates ("Vorlagen"). Read-only. Replaced "Document terms".
   - name: Quotes
+  - name: Orders
+    description: >-
+      Auftraege - the work container between a quote and its invoices. A won
+      quote becomes an order, and the order is what gets invoiced. No internal
+      rate and no profitability figures are exposed here, and there are no
+      sub-routes; see the Order schema.
   - name: Outbound invoices
   - name: Recurring invoices
 
@@ -904,6 +910,92 @@ paths:
             application/pdf:
               schema: { type: string, format: binary }
         "409": { $ref: "#/components/responses/Error" }
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      parameters:
+        - $ref: "#/components/parameters/organisation"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [on_hold, in_progress, abnahme, completed, archived]
+          description: An unknown value is dropped rather than refused, so it filters nothing.
+        - name: customer_id
+          in: query
+          schema: { type: string, format: uuid }
+          description: >-
+            Scoped to your organisation - a uuid belonging to another one is
+            refused with 404, not silently matched against nothing.
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Free-text search over the order.
+      responses:
+        "200":
+          description: A page of orders.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderList" }
+    post:
+      tags: [Orders]
+      summary: Create an order
+      parameters: [ { $ref: "#/components/parameters/organisation" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderInput" }
+      responses:
+        "201":
+          description: The created order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/id"
+      - $ref: "#/components/parameters/organisation"
+    get:
+      tags: [Orders]
+      summary: Read one order
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+    put:
+      tags: [Orders]
+      summary: Update an order (partial)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderInput" }
+      responses:
+        "200":
+          description: The updated order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+    delete:
+      tags: [Orders]
+      summary: Soft-delete an order
+      responses:
+        "200": { description: Deleted. }
+        "409":
+          description: >-
+            `order_has_issued_invoices` - an issued invoice hangs off this
+            order. Cancel or delete that invoice first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /outbound-invoices:
     get:
@@ -3261,6 +3353,135 @@ components:
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
+
+    Order:
+      type: object
+      additionalProperties: true
+      description: >-
+        An order ("Auftrag") - the work container between a quote and its
+        invoices. It carries its own number range `A-{YYYY}-{NNNN}`.
+
+        TWO OMISSIONS ARE DELIBERATE. The portal's own payload also carries
+        `internal_hourly_rate`, `resolved_internal_rate`, `resolved_hourly_rate`
+        and a `financials` block with the margin; this surface leaves all four
+        out, because it is the surface for other systems. `hourly_rate` - what
+        the CUSTOMER is billed - is here; what the work costs you is not.
+        Sending any of the four on a write is accepted and ignored, so a
+        read-modify-write of a portal payload does not fail. And there are no
+        sub-routes: drafting an invoice or a recurring template from an order
+        creates documents and is postponed, so `/orders/{id}/<anything>`
+        answers 404.
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        organisation_id: { type: string, format: uuid, readOnly: true }
+        sequence: { type: integer, readOnly: true }
+        public_index:
+          type: string
+          readOnly: true
+          description: The printed order number, e.g. `A-2026-0007`.
+        label: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [on_hold, in_progress, abnahme, completed, archived]
+          readOnly: true
+          description: >-
+            Read-only here - it is not among the writable keys, so moving an
+            order along is a portal action, not a PUT.
+        color: { type: string }
+        notes: { type: string }
+        customer_id: { type: string, format: uuid, nullable: true }
+        customer_label: { type: string, readOnly: true }
+        customer_company_name: { type: string, readOnly: true }
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The reporting bracket this order rolls up into.
+        project_label: { type: string, readOnly: true }
+        quote_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            The quote this order came from. At most ONE order per quote - the
+            database enforces it, and a second conversion answers 409
+            `order_already_converted`.
+        billed_quote_position_indexes:
+          type: array
+          items: { type: integer }
+          readOnly: true
+          description: >-
+            Which of that quote's lines are already invoiced. Read-only, or one
+            could claim a line was never billed.
+        issue_date: { type: string, format: date, nullable: true }
+        start_date:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: Derived from the work, not writable.
+        end_date: { type: string, format: date, nullable: true }
+        hourly_rate:
+          type: number
+          nullable: true
+          description: >-
+            The CUSTOMER-billing rate pinned to this order, or null when it
+            inherits (order -> customer -> organisation). Not the internal rate,
+            which this surface does not expose.
+        budget_gross: { type: number, nullable: true }
+        deposit_type:
+          type: string
+          enum: [none, percent, amount, goods_percent, service_percent]
+          description: The order's OWN down payment, independent of the quote's.
+        deposit_value:
+          type: number
+          description: A percent 0-100, or a EUR amount for `amount`.
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+          description: >-
+            Set while a final invoice for this order is issued and not
+            cancelled, and cleared again on cancellation. Not settable - a
+            stamp one can set is a stamp that can lie.
+        created_by: { type: string, format: uuid, nullable: true, readOnly: true }
+        created_by_name: { type: string, readOnly: true }
+
+    OrderInput:
+      type: object
+      description: >-
+        On CREATE, `label` and `customer_id` are required (422
+        `label_required` / `order_customer_required`); everything else is
+        optional and a PUT is partial. Keys not listed here are tolerated and
+        ignored rather than refused, which is what makes a read-modify-write of
+        a full order payload safe.
+      properties:
+        label: { type: string }
+        description: { type: string }
+        color: { type: string }
+        notes: { type: string }
+        customer_id: { type: string, format: uuid, nullable: true }
+        project_id: { type: string, format: uuid, nullable: true }
+        quote_id: { type: string, format: uuid, nullable: true }
+        issue_date: { type: string, format: date, nullable: true }
+        end_date: { type: string, format: date, nullable: true }
+        hourly_rate: { type: number, nullable: true }
+        budget_gross: { type: number, nullable: true }
+        deposit_type:
+          type: string
+          enum: [none, percent, amount, goods_percent, service_percent]
+        deposit_value: { type: number }
+
+    OrderList:
+      allOf:
+        - $ref: "#/components/schemas/Pagination"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Order" }
 
     RecurringInvoiceList:
       allOf:

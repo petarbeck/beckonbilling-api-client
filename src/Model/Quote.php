@@ -40,7 +40,8 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $pdf_footer      Printed footer. Was `footer_comment`, which is no longer emitted.
  * @property-read array|null  $order           {id, label, public_index} of the order (Auftrag) this quote
  *                                             became once it was won, or null. Replaced a boolean `has_order`
- *                                             on 2026-08-28. Not itself reachable through this API yet.
+ *                                             on 2026-08-28. Since 0.15.0 that order IS reachable:
+ *                                             `$client->orders->get($quote->order['id'])`.
  * @property-read string|null $partner_id
  * @property-read array|null  $document_ids    Attached document UUIDs.
  * @property-read string|null $document_send_mode "link" | "attach".

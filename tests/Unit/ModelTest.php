@@ -126,4 +126,30 @@ final class ModelTest extends TestCase
         $this->assertFalse($last->hasMore());
         $this->assertNull($last->nextOffset());
     }
+
+    /**
+     * The two helpers on Order. `isSettled()` reads a stamp the API sets and
+     * clears again when the invoice is cancelled - a missing key must answer
+     * false rather than throw, so an older payload stays usable.
+     */
+    public function testOrderHelpers(): void
+    {
+        $offen = new \BeckonBilling\ApiClient\Model\Order(['status' => 'in_progress']);
+        $this->assertTrue($offen->isOpen());
+        $this->assertFalse($offen->isSettled());
+
+        $archiviert = new \BeckonBilling\ApiClient\Model\Order(['status' => 'archived']);
+        $this->assertFalse($archiviert->isOpen());
+
+        $abgerechnet = new \BeckonBilling\ApiClient\Model\Order([
+            'status' => 'completed',
+            'settled_at' => '2026-09-01T08:00:00+02:00',
+        ]);
+        $this->assertTrue($abgerechnet->isSettled());
+
+        // Weder Status noch Stempel: keine Ausnahme, sondern zweimal nein.
+        $leer = new \BeckonBilling\ApiClient\Model\Order([]);
+        $this->assertFalse($leer->isOpen());
+        $this->assertFalse($leer->isSettled());
+    }
 }

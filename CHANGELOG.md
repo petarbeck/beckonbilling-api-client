@@ -3,6 +3,50 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-09-01
+
+The **order** (Auftrag) arrives. It is the entity a won quote turns into, and
+the one that gets invoiced - so until now this client could see that a quote
+had become an order (`Quote::$order`) and could do nothing with it. The portal
+shipped `/api/v1/orders` on 2026-08-30; this release catches up.
+
+### Added
+
+- **`$client->orders`** - read, create, update, delete, plus `list()` filters
+  `status`, `customer_id` (scoped: a uuid of another organisation is refused,
+  not silently unmatched) and `q`. Model `Model\Order`, feature `orders`,
+  helpers `isOpen()` and `isSettled()`. Creating one needs `label` and
+  `customer_id` (422 `label_required` / `order_customer_required`) - measured
+  against the running API, which is how the requirement was found at all.
+
+### What this API deliberately does NOT give you about an order
+
+Both are decisions, not gaps, and both are measurable in the payload:
+
+- **No internal rate and no profitability.** The portal's own payload carries
+  `internal_hourly_rate`, `resolved_internal_rate`, `resolved_hourly_rate` and
+  a `financials` block with the margin. `/api/v1` is the surface for other
+  systems and leaves all four out. `hourly_rate` - what the CUSTOMER is billed
+  - is here; what the work costs you is not. Sent on a write they are tolerated
+  and ignored rather than refused, so a read-modify-write of a payload you got
+  from the portal does not fail.
+- **No sub-routes.** `/orders/{id}/<anything>` answers 404, including the
+  portal's invoice-from-order and recurring-from-order actions - they create
+  documents and need their own checks.
+
+`status`, `start_date`, `settled_at` and `billed_quote_position_indexes` are
+read-only. Deleting an order that carries an issued invoice answers 409
+`order_has_issued_invoices`.
+
+### Changed
+
+- **The 0.14.0 gap is now stated correctly.** `Quotes::convert()`, `Quote::$order`,
+  `AGENTS.md`, `llms.txt` and `README.md` all said the order was "not reachable
+  through this API" - true when written, untrue the moment `orders` shipped.
+  It now reads: the order IS readable, invoicing it is still portal-only.
+  A sentence that was accurate at the time and silently became false is exactly
+  the kind of marker that ends someone's search in the wrong place.
+
 ## [0.14.0] - 2026-08-30
 
 The portal rebuilt how a quote is won: it is now immutable once issued, a
