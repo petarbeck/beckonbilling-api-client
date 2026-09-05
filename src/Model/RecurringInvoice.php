@@ -48,8 +48,12 @@ namespace BeckonBilling\ApiClient\Model;
  * @property-read string|null $pdf_note
  * @property-read array|null  $positions
  * @property-read array|null  $reference_fields
- * @property-read array|null  $document_ids    Read-only here: INTERNAL INTEGER ids, not UUIDs (the one
- *                                             place this API exposes them). Do not build on them.
+ * @property-read array|null  $document_ids    Attachments as INTERNAL INTEGER ids, not UUIDs (the one place
+ *                                             this API exposes them). Accepted on a write, but do not write it:
+ *                                             a foreign or unknown id is dropped in SILENCE, not refused.
+ * @property-read array|null  $document_uuids  The same attachments by uuid - the counterpart to document_ids and
+ *                                             the one to send on a write; it wins when both are present. Which
+ *                                             of the two the wire keeps long-term is still open.
  * @property-read string|null $last_generated_period  The period key the last successful run consumed.
  * @property-read string|null $last_run_at     ISO datetime. The last time the portal's agent actually ATTEMPTED to run this
  *                                              template (generate + send) - never set on a run that was skipped because the

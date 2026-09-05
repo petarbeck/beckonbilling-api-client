@@ -158,9 +158,11 @@ status itself, until a valid reason is present.
 resulting `Quote` may then carry `order` (`{id, label, public_index}`, replacing
 a bare `has_order` bit since 2026-08-28) and the `update()` response may carry
 `order_confirmation` (`{sent: bool, error: string}`) describing whether that
-mail went out. **This API has no order endpoint yet** - `order` tells you one
-exists and names it; it does not let you read, invoice or otherwise act on it
-through this client. Use the portal for that until an order route ships.
+mail went out. **Since 0.15.0 `order['id']` is a usable handle** -
+`$client->orders->get($order['id'])` reads that order, and `$client->orders`
+also creates, updates and deletes one. What this client still cannot do is
+INVOICE it: an order has no sub-routes, so the portal's invoice-from-order and
+recurring-from-order actions remain portal-only. See "Orders" below.
 
 **Sending `positions` can be refused even on a quote that is NOT locked at
 all - `draft`, `lost` and `revising` included.** 409
@@ -553,8 +555,14 @@ $client->recurringInvoices->create([
 ## Field conventions (from the API)
 
 - IDs are opaque UUID strings. The ONE exception is
-  `RecurringInvoice.document_ids`, which carries internal integer ids and is not
-  settable through this contract - do not build on it.
+  `RecurringInvoice.document_ids`, which carries internal integer ids. It is
+  accepted on a write, but do not write it: a foreign or unknown id is dropped
+  in SILENCE rather than refused, so a wrong value is indistinguishable from a
+  saved one. **`RecurringInvoice.document_uuids` is the same list of
+  attachments addressed by uuid** - readable, writable, resolved within the
+  organisation, and it WINS over `document_ids` when both are sent. Read either,
+  write `document_uuids`. Which of the two the wire keeps in the long run is
+  still open; no date is promised and neither is deprecated.
 - Dates: calendar-day fields (`issue_date`, `due_date`, `valid_until`,
   `first_run_date`) are `YYYY-MM-DD`; timestamps are ISO offset datetimes; unset
   = `null`.
@@ -750,9 +758,11 @@ $client->recurringInvoices->create([
   agent creates invoices from them, once a day at 08:00 in the ORGANISATION's
   own timezone - so a poller watching `next_run_at` sees a per-organisation
   local schedule, not one fixed UTC hour.
-- Only these eight entities are on `/api/v1` (plus article variants, as a
-  sub-collection of an article); suppliers, **orders**, projects, inbound
-  invoices, banking, etc. are portal-internal and not reachable with a token.
+- Only these **nine** entities are on `/api/v1` (plus article variants, as a
+  sub-collection of an article) - **orders among them since 0.15.0**;
+  suppliers, projects, inbound invoices, banking, etc. are portal-internal and
+  not reachable with a token. An order is readable and writable, but has no
+  sub-routes: `/orders/{id}/<anything>` answers 404.
 - **Creating answers 201**, not 200. Everything else answers 200.
 - A position's `unit` is resolved on the way in, so what comes back is often
   not what you sent (`piece` reads back as `Stück`). Send `unit_key` instead and

@@ -3,6 +3,46 @@
 All notable changes to this project are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **`document_uuids` on a recurring invoice** (`openapi.yaml`, schemas
+  `RecurringInvoice` and `RecurringInvoiceInput`; `AGENTS.md`; `llms.txt`).
+  The same attachments as `document_ids`, addressed by uuid like every other
+  document reference on this API. Readable and writable, resolved within the
+  organisation, and it WINS over `document_ids` when a request carries both.
+  The server has emitted and accepted it since 2026-08-11 - this release
+  documents it; nothing on the wire changed. Purely additive: no existing key
+  moved, none was removed, and `document_ids` is not deprecated.
+
+  **Which of the two the wire keeps is still open.** Moving the attachment
+  list off internal integers is a contract change of its own and has not been
+  decided; no date is promised here.
+
+### Fixed (documentation only - no server change)
+
+- **The contract no longer says there is no order endpoint.** Three sentences
+  survived 0.15.0 and contradicted the same documents that carry `/orders`:
+  `openapi.yaml` `info.description` ("This API has no order endpoint yet ...
+  keep using the portal for that step until an order route ships"), the
+  description of `Quote.order` ("The order itself is not reachable through
+  this API yet"), and the `status: 'won'` section of `AGENTS.md`. All three now
+  state the real boundary: the order IS readable and writable, INVOICING it is
+  not, because an order has no sub-routes (`/orders/{id}/<anything>` -> 404).
+  The gotcha in `AGENTS.md` that still counted orders among the
+  "portal-internal" entities, and the entity count in `llms.txt` (eight, for
+  seven writable plus two read-only), are corrected with them.
+
+- **`RecurringInvoice.document_ids` is not `readOnly`.** The schema marked it
+  `readOnly: true` and said it was "not settable through this contract", while
+  the server reads the key on `POST` and `PUT` and writes the list. The flag is
+  gone and the field is described as it behaves - including the part that
+  matters more than the flag did: a foreign or unknown id is DROPPED in
+  silence rather than refused, so a wrong value cannot be told apart from a
+  saved one. That is why the field is documented as read-this, write
+  `document_uuids`. Both keys are now listed on `RecurringInvoiceInput`.
+
 ## [0.15.0] - 2026-09-01
 
 The **order** (Auftrag) arrives. It is the entity a won quote turns into, and
@@ -1092,8 +1132,6 @@ contract. Closing that gap deliberately is its own piece of work.
 
   Requires portal build `13e0da8` or later.
 
-## [Unreleased]
-
 ## [0.4.0] - 2026-07-29
 
 ### Added
@@ -1163,5 +1201,5 @@ Initial release.
 - PSR-18 / PSR-17 transport with auto-discovery via `php-http/discovery`.
 - Canonical `openapi.yaml` contract, `README.md`, and `AGENTS.md` agent guide.
 
-[Unreleased]: https://github.com/petarbeck/beckonbilling-api-client/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/petarbeck/beckonbilling-api-client/compare/v0.15.0...HEAD
 [0.1.0]: https://github.com/petarbeck/beckonbilling-api-client/releases/tag/v0.1.0

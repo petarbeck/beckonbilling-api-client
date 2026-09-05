@@ -58,20 +58,26 @@ info:
     410 with `error.key = quote_conversion_moved` unconditionally - no
     deprecation window, closed the same day the portal's own equivalent
     button was. A quote is no longer turned into an invoice directly: a WON
-    quote becomes an **order** first (a portal-internal entity, "Auftrag"),
-    and the order is what gets invoiced.
+    quote becomes an **order** first ("Auftrag"), and the order is what gets
+    invoiced.
 
-    **This API has no order endpoint yet.** There is currently no `/api/v1`
-    route to read an order, trigger its invoice, or otherwise reach what a
-    won quote turned into - that surface is portal/MCP-only for now. A client
-    that used to convert a won quote into an invoice through this API has no
-    replacement call to make here; keep using the portal for that step until
-    an order route ships.
+    **The order IS reachable here; INVOICING it is not.** `GET|POST /orders`
+    and `GET|PUT|DELETE /orders/{id}` (tag *Orders*) read and write the order
+    a won quote turned into, and `Quote.order` carries its uuid as the handle.
+    What has no route is the step after it: an order has **no sub-routes**, so
+    `/orders/{id}/<anything>` answers 404 - the portal's invoice-from-order and
+    recurring-from-order actions create documents and stay portal/MCP-only. A
+    client that used to convert a won quote into an invoice through this API
+    still has no replacement call for that one step.
 
     ## Conventions
 
     - **IDs** are opaque UUID strings; integer ids are never exposed. (One
-      exception, flagged where it occurs: `RecurringInvoice.document_ids`.)
+      exception, flagged where it occurs: `RecurringInvoice.document_ids`.
+      `RecurringInvoice.document_uuids` is the same list expressed the
+      conventional way and can be read and written instead; which of the two
+      the record ends up carrying on the wire is still open, so treat neither
+      as retired.)
     - **Lists** are paginated (`limit` default 100, max 500) and return
       `{ data, total, limit, offset }`.
     - **Creating answers 201**; reading, updating and every action answer 200.
@@ -2276,9 +2282,10 @@ components:
             The order (`Auftrag`) this quote became once it was won, or null
             while none exists. **Replaced a boolean `has_order` on
             2026-08-28** - the only remaining consumer needed a reference, not
-            a bit. The order itself is not reachable through this API yet
-            (see the note at the top of this document): this is enough to
-            know one exists and to show its number, not to act on it here.
+            a bit. Since the order routes shipped, `id` is the handle for
+            `GET /orders/{id}` - what is still not possible here is invoicing
+            it, because an order has no sub-routes (see the note at the top of
+            this document).
           properties:
             id: { type: string, description: Uuid of the order. }
             label: { type: string }
@@ -3213,14 +3220,29 @@ components:
           items: { $ref: "#/components/schemas/ReferenceField" }
         document_ids:
           type: array
-          readOnly: true
           items: { type: integer }
           description: >-
             Documents attached to every generated invoice. **The one place this
             API exposes INTERNAL INTEGER ids rather than UUIDs** - a wire wart
-            that predates the convention and is not settable through this
-            contract. Do not build on these values; manage the attachments in the
-            portal.
+            that predates the convention. It IS accepted on a write, but writing
+            it is a poor idea: an id that belongs to another organisation, or to
+            nothing at all, is dropped in silence rather than refused, so a
+            wrong value looks exactly like a saved one. Send `document_uuids`
+            instead and read this field only to see what is attached. Moving
+            this list off integers is a contract change of its own and is still
+            open - no date is promised, and the field is not deprecated.
+        document_uuids:
+          type: array
+          items: { type: string, format: uuid }
+          description: >-
+            The same attachments as `document_ids`, addressed the conventional
+            way - the uuid counterpart to that list, in the same order, and the
+            way every other document reference on this API is written. Readable
+            and writable. On a write it WINS over `document_ids` when both are
+            present, and each uuid is resolved within the organisation, so a
+            foreign or unknown one cannot pull in another organisation's file.
+            An id with no uuid behind it is omitted from the read, which is why
+            this list can be shorter than `document_ids`.
         last_generated_period:
           type: string
           readOnly: true
@@ -3350,6 +3372,22 @@ components:
         reference_fields:
           type: array
           items: { $ref: "#/components/schemas/ReferenceField" }
+        document_uuids:
+          type: array
+          items: { type: string, format: uuid }
+          description: >-
+            Attachments for every generated invoice, by uuid - the way to set
+            them. Resolved within the organisation, so a foreign or unknown
+            uuid cannot attach another organisation's file. Sent together with
+            `document_ids`, this key wins and the other is not looked at.
+        document_ids:
+          type: array
+          items: { type: integer }
+          description: >-
+            The legacy integer form of the same list. Accepted, but a value
+            that is foreign or unknown is DROPPED in silence rather than
+            refused - deliberate, because stored rows predate the check, and
+            the reason to prefer `document_uuids`. Replaces the whole list.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }
