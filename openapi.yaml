@@ -73,11 +73,8 @@ info:
     ## Conventions
 
     - **IDs** are opaque UUID strings; integer ids are never exposed. (One
-      exception, flagged where it occurs: `RecurringInvoice.document_ids`.
-      `RecurringInvoice.document_uuids` is the same list expressed the
-      conventional way and can be read and written instead; which of the two
-      the record ends up carrying on the wire is still open, so treat neither
-      as retired.)
+      exception, flagged where it occurs: `RecurringInvoice.document_ids` -
+      and that one is now **deprecated**, see below.)
     - **Lists** are paginated (`limit` default 100, max 500) and return
       `{ data, total, limit, offset }`.
     - **Creating answers 201**; reading, updating and every action answer 200.
@@ -91,6 +88,26 @@ info:
     - **Amounts** are decimal net numbers; `tax_percent` is a percentage.
     - **Errors** have the shape `{ "error": { code, message, key } }`; branch on
       the stable `key`.
+
+    ## Deprecations
+
+    One key is on its way out. It still works, and nothing on the wire changes
+    while it does.
+
+    - **`document_ids` on a recurring invoice** (`RecurringInvoice` and
+      `RecurringInvoiceInput`) is **deprecated as of the next minor release**
+      (`CHANGELOG.md`, `[Unreleased]`; this project assigns the number by hand
+      at tag time, so none is promised here) and will be **REMOVED in the next
+      major release**. Its replacement is **`document_uuids`** - the same
+      attachments, addressed the conventional way.
+
+      Both keys stay readable and writable for the whole transition, so no
+      caller has to move on any particular day. When a request carries BOTH,
+      `document_uuids` is the one applied and `document_ids` is not looked at.
+      Move now rather than later: an integer id that belongs to another
+      organisation, or to nothing at all, is dropped in SILENCE rather than
+      refused, so a wrong value cannot be told apart from a saved one - which
+      is the wart this removal exists to close.
 
     ## Strict mode (`?strict=1`)
 
@@ -3221,23 +3238,26 @@ components:
         document_ids:
           type: array
           items: { type: integer }
+          deprecated: true
           description: >-
-            Documents attached to every generated invoice. **The one place this
-            API exposes INTERNAL INTEGER ids rather than UUIDs** - a wire wart
-            that predates the convention. It IS accepted on a write, but writing
-            it is a poor idea: an id that belongs to another organisation, or to
-            nothing at all, is dropped in silence rather than refused, so a
-            wrong value looks exactly like a saved one. Send `document_uuids`
-            instead and read this field only to see what is attached. Moving
-            this list off integers is a contract change of its own and is still
-            open - no date is promised, and the field is not deprecated.
+            **DEPRECATED - use `document_uuids`.** Deprecated as of the next
+            minor release and **removed in the next major release**; until
+            then it is emitted and accepted exactly as before, so nothing
+            breaks today. Documents attached to every generated invoice, as
+            **INTERNAL INTEGER ids rather than UUIDs** - the one place this API
+            ever exposed them, a wire wart that predates the convention.
+            Writing it is why it is going: an id that belongs to another
+            organisation, or to nothing at all, is dropped in silence rather
+            than refused, so a wrong value looks exactly like a saved one.
+            Send `document_uuids`, which WINS when a request carries both.
         document_uuids:
           type: array
           items: { type: string, format: uuid }
           description: >-
             The same attachments as `document_ids`, addressed the conventional
             way - the uuid counterpart to that list, in the same order, and the
-            way every other document reference on this API is written. Readable
+            way every other document reference on this API is written. **This
+            is the replacement for the deprecated `document_ids`.** Readable
             and writable. On a write it WINS over `document_ids` when both are
             present, and each uuid is resolved within the organisation, so a
             foreign or unknown one cannot pull in another organisation's file.
@@ -3377,17 +3397,23 @@ components:
           items: { type: string, format: uuid }
           description: >-
             Attachments for every generated invoice, by uuid - the way to set
-            them. Resolved within the organisation, so a foreign or unknown
-            uuid cannot attach another organisation's file. Sent together with
+            them, and the replacement for the deprecated `document_ids`.
+            Resolved within the organisation, so a foreign or unknown uuid
+            cannot attach another organisation's file. Sent together with
             `document_ids`, this key wins and the other is not looked at.
         document_ids:
           type: array
           items: { type: integer }
+          deprecated: true
           description: >-
-            The legacy integer form of the same list. Accepted, but a value
-            that is foreign or unknown is DROPPED in silence rather than
-            refused - deliberate, because stored rows predate the check, and
-            the reason to prefer `document_uuids`. Replaces the whole list.
+            **DEPRECATED - use `document_uuids`.** Deprecated as of the next
+            minor release and **removed in the next major release**; accepted
+            unchanged until then. The legacy integer form of the same list,
+            and it replaces the whole list. A value that is foreign or unknown
+            is DROPPED in silence rather than refused - deliberate, because
+            stored rows predate the check, and the reason to prefer
+            `document_uuids`. Sent together with `document_uuids`, this key is
+            not looked at at all.
         positions:
           type: array
           items: { $ref: "#/components/schemas/Position" }

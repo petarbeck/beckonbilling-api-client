@@ -138,6 +138,28 @@ Each writable resource offers `list()`, `autoPaging()`, `get()`, `create()`,
 quote becomes an order, and the order is what gets invoiced - see AGENTS.md
 for what that means for this client today.
 
+## Deprecations
+
+`recurring_invoice.document_ids` - the attachment list carried as internal
+INTEGER ids, the one place this API ever exposed them - is **deprecated as of
+the next minor release and removed in the next major release**. Use
+`document_uuids`, the same attachments addressed by uuid:
+
+```php
+$client->recurringInvoices->update($id, [
+    'document_uuids' => ['1f2e…', '9a8b…'],   // the way to set attachments
+]);
+
+$template->documentUuids();   // read them back
+$template->documentIds();     // still works, @deprecated
+```
+
+Nothing on the wire changes while both exist: the API keeps emitting and
+accepting either key, and a request carrying both is applied from
+`document_uuids`. Move anyway - an integer id belonging to another
+organisation, or to nothing at all, is dropped in silence rather than refused,
+so a wrong value cannot be told apart from a saved one.
+
 ## Pagination
 
 Lists return a `Collection` (`data`, `total`, `limit`, `offset`; iterable and

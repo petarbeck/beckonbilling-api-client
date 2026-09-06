@@ -14,11 +14,42 @@ to [Semantic Versioning](https://semver.org/).
   organisation, and it WINS over `document_ids` when a request carries both.
   The server has emitted and accepted it since 2026-08-11 - this release
   documents it; nothing on the wire changed. Purely additive: no existing key
-  moved, none was removed, and `document_ids` is not deprecated.
+  moved and none was removed.
 
-  **Which of the two the wire keeps is still open.** Moving the attachment
-  list off internal integers is a contract change of its own and has not been
-  decided; no date is promised here.
+  **Which of the two the wire keeps is no longer open** - see *Deprecated*
+  below. `document_uuids` is the one that stays.
+
+### Deprecated
+
+- **`document_ids` on a recurring invoice is deprecated** (`openapi.yaml`,
+  schemas `RecurringInvoice` and `RecurringInvoiceInput`, both now carrying
+  `deprecated: true`; `AGENTS.md`; `llms.txt`; `README.md`;
+  `Model\RecurringInvoice`). Its replacement is **`document_uuids`**, added in
+  this same release. The key is removed in the **next major release** - the
+  one that closes the last place this API exposed an internal integer id. It
+  is named by VERSION, not by date, and no number is given for either end of
+  the window: under this project's rules (see 0.6.1) MINOR and MAJOR are a
+  human's call at tag time, so a number written here in advance would be a
+  guess. External consumers pin on a range, and a range is what tells them
+  when the removal reaches them.
+
+  **Nothing on the wire changes in the meantime.** The API goes on emitting
+  and accepting both keys for the whole transition, so no existing call site
+  breaks in this release and none has to move on a particular day. A request
+  that carries BOTH is applied from `document_uuids`; `document_ids` is not
+  looked at (portal `RecurringInvoiceEndpoint::apply()`).
+
+  The reason to move now is that the integer form cannot be checked: an id
+  belonging to another organisation, or to nothing at all, is DROPPED in
+  silence rather than refused, so a wrong value is indistinguishable from a
+  saved one.
+
+- **`Model\RecurringInvoice::documentIds()`** is a new accessor, marked
+  `@deprecated` from the day it ships, next to the plain
+  **`documentUuids()`**. Both read the payload the client already carried -
+  they exist so an IDE and a static analyser can point a call site at the
+  replacement, which a magic `@property-read` hint cannot do. The class itself
+  is not deprecated; only that one method is.
 
 ### Fixed (documentation only - no server change)
 

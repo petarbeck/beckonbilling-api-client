@@ -14,6 +14,7 @@ use BeckonBilling\ApiClient\Model\DocumentTemplate;
 use BeckonBilling\ApiClient\Model\Order;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
 use BeckonBilling\ApiClient\Model\Quote;
+use BeckonBilling\ApiClient\Model\RecurringInvoice;
 use BeckonBilling\ApiClient\Model\Unit;
 use BeckonBilling\ApiClient\Tests\Support\ClientTestCase;
 use BeckonBilling\ApiClient\Tests\Support\MockHttpClient;
@@ -579,5 +580,34 @@ final class ResourceTest extends ClientTestCase
         } catch (ConflictException $e) {
             $this->assertSame('order_has_issued_invoices', $e->getErrorKey());
         }
+    }
+
+    /**
+     * `document_uuids` is the way to set a recurring invoice's attachments and
+     * the replacement for the deprecated `document_ids`. It has to reach the
+     * wire verbatim - the uuids are resolved server-side, so anything the
+     * client did to them here would be silently wrong.
+     */
+    public function testRecurringInvoiceAttachmentsAreWrittenAndReadByUuid(): void
+    {
+        $uuids = ['1f2e3d4c-0000-4000-8000-000000000001', '9a8b7c6d-0000-4000-8000-000000000002'];
+        $http = (new MockHttpClient())->push(200, [
+            'id' => 'r1',
+            'label' => 'Hosting',
+            'document_ids' => [17, 42],
+            'document_uuids' => $uuids,
+        ]);
+
+        $template = $this->makeClient($http)->recurringInvoices->update('r1', ['document_uuids' => $uuids]);
+
+        $request = $http->lastRequest();
+        $this->assertSame('PUT', $request->getMethod());
+        $this->assertStringContainsString('/recurring-invoices/r1', (string) $request->getUri());
+        $this->assertSame(['document_uuids' => $uuids], $this->bodyOf($request));
+
+        $this->assertInstanceOf(RecurringInvoice::class, $template);
+        $this->assertSame($uuids, $template->documentUuids());
+        // The deprecated list stays readable for the whole transition.
+        $this->assertSame([17, 42], $template->documentIds());
     }
 }

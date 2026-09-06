@@ -460,7 +460,9 @@ $customer->new_api_field; // fields added by the API later are still reachable
 ```
 
 Models are **immutable** (writing a key throws `\LogicException`). Typed helpers:
-`Quote::isDraft()`, `OutboundInvoice::isPaid()/isDraft()/isCreditNote()`.
+`Quote::isDraft()`, `OutboundInvoice::isPaid()/isDraft()/isCreditNote()`,
+`Order::isOpen()/isSettled()`, `RecurringInvoice::documentUuids()` (and
+`RecurringInvoice::documentIds()`, deprecated - see "Field conventions").
 
 ## Pagination
 
@@ -549,20 +551,29 @@ $client->recurringInvoices->create([
     'label' => 'Hosting', 'customer_id' => $customerId,
     'interval' => 'monthly', 'first_run_date' => '2026-08-01',
     'positions' => [['title' => 'Hosting', 'quantity' => 1, 'price' => 20, 'tax_percent' => 20]],
+    // Attachments by uuid. `document_ids` (integers) still works and is
+    // deprecated - it goes in the next major release.
+    'document_uuids' => [$documentUuid],
 ]);
 ```
 
 ## Field conventions (from the API)
 
 - IDs are opaque UUID strings. The ONE exception is
-  `RecurringInvoice.document_ids`, which carries internal integer ids. It is
-  accepted on a write, but do not write it: a foreign or unknown id is dropped
-  in SILENCE rather than refused, so a wrong value is indistinguishable from a
-  saved one. **`RecurringInvoice.document_uuids` is the same list of
-  attachments addressed by uuid** - readable, writable, resolved within the
-  organisation, and it WINS over `document_ids` when both are sent. Read either,
-  write `document_uuids`. Which of the two the wire keeps in the long run is
-  still open; no date is promised and neither is deprecated.
+  `RecurringInvoice.document_ids`, which carries internal integer ids - and
+  **that key is now DEPRECATED**: deprecated as of the next minor release of
+  this client, removed in the next MAJOR release. Use
+  **`RecurringInvoice.document_uuids`**, the same list of attachments
+  addressed by uuid - readable, writable, resolved within the organisation,
+  and it WINS over `document_ids` when both are sent.
+
+  Nothing on the wire changes during the transition: the API keeps emitting
+  and accepting both keys, so no call site has to move on a particular day.
+  Move anyway, because the integer form cannot be checked - a foreign or
+  unknown id is dropped in SILENCE rather than refused, so a wrong value is
+  indistinguishable from a saved one. On the model:
+  `RecurringInvoice::documentUuids()` is the accessor;
+  `RecurringInvoice::documentIds()` is kept and marked `@deprecated`.
 - Dates: calendar-day fields (`issue_date`, `due_date`, `valid_until`,
   `first_run_date`) are `YYYY-MM-DD`; timestamps are ISO offset datetimes; unset
   = `null`.

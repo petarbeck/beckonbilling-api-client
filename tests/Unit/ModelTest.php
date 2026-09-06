@@ -7,6 +7,7 @@ namespace BeckonBilling\ApiClient\Tests\Unit;
 use BeckonBilling\ApiClient\Collection;
 use BeckonBilling\ApiClient\Model\Customer;
 use BeckonBilling\ApiClient\Model\OutboundInvoice;
+use BeckonBilling\ApiClient\Model\RecurringInvoice;
 use PHPUnit\Framework\TestCase;
 
 final class ModelTest extends TestCase
@@ -151,5 +152,45 @@ final class ModelTest extends TestCase
         $leer = new \BeckonBilling\ApiClient\Model\Order([]);
         $this->assertFalse($leer->isOpen());
         $this->assertFalse($leer->isSettled());
+    }
+
+    /**
+     * A recurring invoice carries its attachments twice. `document_uuids` is
+     * the replacement; `document_ids` is deprecated but still on the wire, so
+     * BOTH have to survive a round trip - a client that dropped either one on
+     * deserialisation would break a caller mid-transition.
+     */
+    public function testRecurringInvoiceCarriesBothAttachmentLists(): void
+    {
+        $payload = [
+            'id' => 'r1',
+            'label' => 'Hosting',
+            'document_ids' => [17, 42],
+            'document_uuids' => ['1f2e3d4c-0000-4000-8000-000000000001', '9a8b7c6d-0000-4000-8000-000000000002'],
+        ];
+        $template = new RecurringInvoice($payload);
+
+        $this->assertSame([17, 42], $template->document_ids);
+        $this->assertSame($payload['document_uuids'], $template->document_uuids);
+
+        // The typed accessors read the same payload, and toArray/json keep the
+        // whole thing - serialising a model back must not lose either key.
+        $this->assertSame([17, 42], $template->documentIds());
+        $this->assertSame($payload['document_uuids'], $template->documentUuids());
+        $this->assertSame($payload, $template->toArray());
+        $this->assertSame(json_encode($payload), json_encode($template));
+    }
+
+    /**
+     * A payload without the keys answers with empty lists, never an error: a
+     * template with no attachments is ordinary, and so is a response from an
+     * API older than `document_uuids`.
+     */
+    public function testRecurringInvoiceAttachmentAccessorsTolerateAMissingKey(): void
+    {
+        $template = new RecurringInvoice(['id' => 'r1']);
+
+        $this->assertSame([], $template->documentIds());
+        $this->assertSame([], $template->documentUuids());
     }
 }
