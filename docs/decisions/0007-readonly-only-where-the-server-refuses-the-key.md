@@ -1,4 +1,4 @@
-# 0007 — `readOnly` is claimed only where the server really refuses the key
+# 0007 - `readOnly` is claimed only where the server really refuses the key
 
 **Status:** Accepted
 
@@ -45,7 +45,7 @@ does, checked against the implementation, and nothing else.
   automates ([0001](0001-openapi-yaml-is-the-canonical-contract.md)).
 - Silent discard remains the API's default for an unrecognised body key.
   The only mechanism against it is opt-in `?strict=1`, which answers 400
-  `unrecognised_keys` — and which **does nothing on `/articles` and
+  `unrecognised_keys` - and which **does nothing on `/articles` and
   `/article-categories`**, because those declare no key list. A pass there
   is not a validated request.
 - Documented-but-silently-dropped values are a class of defect, not a

@@ -1,4 +1,4 @@
-# 0005 — Errors are typed classes, and callers branch on `error.key`
+# 0005 - Errors are typed classes, and callers branch on `error.key`
 
 **Status:** Accepted
 
@@ -10,14 +10,14 @@ The API answers a failure with `{ "error": { code, message, key } }`
 (`openapi.yaml`, "Conventions"). Of the three fields only `key` is a stable
 contract: `message` is prose meant for a human and can be reworded or
 translated, and `code` is an internal number. The HTTP status alone is too
-coarse to branch on — a 409 from this API is a draft PDF download, the
+coarse to branch on - a 409 from this API is a draft PDF download, the
 deletion of an issued invoice, an un-pay while linked payments exist, and
 four distinct quote locks (`quote_issued_locked`, `quote_closed_locked`,
 `quote_closed_undeletable`, `quote_positions_locked_by_billing`), all of
 which a caller has to handle differently.
 
 A caller that matches on the message string breaks the first time somebody
-edits it — which is the same silent-breakage failure mode the rest of this
+edits it - which is the same silent-breakage failure mode the rest of this
 contract is written to avoid.
 
 ## Decision
@@ -40,7 +40,7 @@ branch is `getErrorKey()`.
   same shape rather than sent: `Resource\Quotes::convert()` throws
   `GoneException` with `quote_conversion_moved` locally, and
   `Resource\ReadOnlyResource` throws a plain `\LogicException` for
-  `create`/`update`/`delete` on `units` and `document-templates` — a
+  `create`/`update`/`delete` on `units` and `document-templates` - a
   programming error, not an API answer, and deliberately not an
   `ApiException`.
 
@@ -54,7 +54,7 @@ branch is `getErrorKey()`.
 - The catalogue of keys lives in the contract, not in this package: the
   client never validates that a key it received is one the contract lists,
   so a key the server invents is delivered verbatim.
-- Documentation everywhere states the key, not the message — `AGENTS.md`
+- Documentation everywhere states the key, not the message - `AGENTS.md`
   ("Errors"), `README.md` ("Error handling") and `openapi.yaml` all name
   keys, and the example code matches on them.
 - Two capability refusals (`send_not_permitted`, `bank_not_permitted`) are

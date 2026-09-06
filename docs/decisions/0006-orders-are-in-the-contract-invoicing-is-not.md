@@ -1,4 +1,4 @@
-# 0006 — The order is part of this contract; invoicing one is not
+# 0006 - The order is part of this contract; invoicing one is not
 
 **Status:** Accepted
 
@@ -8,7 +8,7 @@
 ## Context
 
 On 2026-08-28 `POST /quotes/{id}/convert` was retired to 410
-`quote_conversion_moved`, with no deprecation window — the same day the
+`quote_conversion_moved`, with no deprecation window - the same day the
 portal's own equivalent action was closed. A won quote is no longer turned
 into an invoice directly: it becomes an **order** (Auftrag) first, and the
 order is what gets invoiced. That left this client with a gap no caller
@@ -47,7 +47,7 @@ remains is stated identically everywhere it is mentioned.
 
 ## Consequences
 
-- The entity count is nine — seven writable (customers, article categories,
+- The entity count is nine - seven writable (customers, article categories,
   articles, quotes, orders, outbound invoices, recurring invoices) and two
   read-only (units, document templates). A count stated in prose is a
   maintenance hazard and had already gone wrong twice; it is now stated in
@@ -57,7 +57,7 @@ remains is stated identically everywhere it is mentioned.
   named refusal instead of a fatal "undefined method"
   ([0005](0005-errors-are-typed-and-branch-on-error-key.md)).
 - The correction shipped as a changelog entry under "Fixed (documentation
-  only - no server change)" — nothing on the wire moved
+  only - no server change)" - nothing on the wire moved
   ([0004](0004-changelog-is-the-announcement-channel.md)).
 - A contract sentence that denies a feature is a claim with a shelf life.
   Both defects found in this round were of that kind (see also

@@ -1,4 +1,4 @@
-# 0008 — `document_uuids` replaces `document_ids`; the window closes at the next major
+# 0008 - `document_uuids` replaces `document_ids`; the window closes at the next major
 
 **Status:** Accepted
 
@@ -7,7 +7,7 @@
 ## Context
 
 `/api/v1` has one convention it breaks exactly once. Its `info.description`
-promises that "IDs are opaque UUID strings; integer ids are never exposed" —
+promises that "IDs are opaque UUID strings; integer ids are never exposed" -
 and a recurring invoice carries its attached documents as a list of raw
 internal integers, `document_ids`. Neither side of the contract could fix
 that alone: the server cannot stop emitting a key that is in the published
@@ -50,7 +50,7 @@ release.**
   `@property-read` hints, because a hint cannot carry a targeted deprecation
   an IDE or a static analyser will point at
   ([0002](0002-hand-written-thin-client-no-generator.md)). The tag sits on
-  the one method, not on the class — otherwise every use of the model is
+  the one method, not on the class - otherwise every use of the model is
   flagged as stale.
 
 ## Consequences
@@ -63,7 +63,7 @@ release.**
   notified, and no date is promised.
 - Until the removal, both spellings must stay documented, tested and
   described in `AGENTS.md`, `llms.txt` and `README.md` (which grew a
-  *Deprecations* section for it) — the transition costs duplication in five
+  *Deprecations* section for it) - the transition costs duplication in five
   documents, deliberately.
 - The `[Unreleased]` "Added" entry from `0148b9c` said the question of which
   key stays was still open; it was corrected in the same release rather than

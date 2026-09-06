@@ -1,4 +1,4 @@
-# 0002 — A hand-written thin client, not a generated one
+# 0002 - A hand-written thin client, not a generated one
 
 **Status:** Accepted
 
@@ -17,7 +17,7 @@ generator step anywhere in the build.
 The reason is what the package is for. A generated client mirrors the
 schema: one class per entity, one typed property per documented field, and a
 regeneration for every additive server change. This API adds fields
-continuously — a consumer that has to wait for a client release before it can
+continuously - a consumer that has to wait for a client release before it can
 read a new field is worse off than one reading an array. What is worth
 typing here is not the payload; it is the small set of things a caller gets
 wrong: transport, pagination, organisation scoping, and the failure modes.
@@ -28,7 +28,7 @@ The client is written and maintained by hand, and stays thin.
 
 - Uniform CRUD lives once, in `Resource\AbstractResource`
   (`list`, `autoPaging`, `get`, `create`, `update`, `delete`). A resource
-  class adds only what is specific to it — `Resource\Quotes::issue()`,
+  class adds only what is specific to it - `Resource\Quotes::issue()`,
   `Resource\OutboundInvoices::cancel()`, `Resource\Articles` and its variant
   sub-collection.
 - Read-only collections extend `Resource\ReadOnlyResource`, whose
@@ -47,8 +47,8 @@ The client is written and maintained by hand, and stays thin.
 ## Consequences
 
 - A field the API adds is readable the day it ships, with no client release.
-  A field the API *removes* or renames is silent in the other direction —
-  the model happily returns `null` — which is one of the reasons the wire
+  A field the API *removes* or renames is silent in the other direction -
+  the model happily returns `null` - which is one of the reasons the wire
   keeps both spellings during a rename window (see
   [0008](0008-document-uuids-replace-document-ids.md)).
 - Static analysis of payload access is limited to what the `@property-read`
