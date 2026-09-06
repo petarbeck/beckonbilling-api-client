@@ -255,7 +255,9 @@ composer test        # PHPUnit, fully mocked - no network
 ```
 
 The API contract in `openapi.yaml` and the agent guide in `AGENTS.md` are part
-of the release and are kept in sync with the API surface.
+of the release and are kept in sync with the API surface. The reasoning behind
+them lives in [`docs/decisions/`](docs/decisions/) as ADRs; a change that
+affects more than one file, or that a consumer would notice, gets one.
 
 ## License
 

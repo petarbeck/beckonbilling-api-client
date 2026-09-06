@@ -5,6 +5,11 @@ Context for an AI coding agent working in a **consumer** project that uses the
 the library correctly without reading its source. (The canonical HTTP contract
 is [`openapi.yaml`](openapi.yaml); this file is the client-usage companion.)
 
+**Why things are the way they are** is recorded in
+[`docs/decisions/`](docs/decisions/) - one ADR per decision, appended and never
+rewritten. A decision that touches more than one file here, or that a consumer
+of `/api/v1` would notice, gets an ADR next to its `CHANGELOG.md` entry.
+
 ## What this package is
 
 A thin, typed PHP wrapper over the Beckon Billing public REST API (`/api/v1`).
